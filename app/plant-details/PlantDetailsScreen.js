@@ -492,7 +492,7 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
                           )}
                           {careInfo.basicInfo.family && (
                             <View style={styles.infoRow}>
-                              <MaterialIcons name="family-restroom" size={18} color="#2E7D32" style={styles.infoIcon} />
+                              <MaterialIcons name="category" size={18} color="#8D6E63" style={styles.infoIcon} />
                               <Text style={styles.infoText}>
                                 <Text style={styles.infoLabel}>Family: </Text>
                                 {careInfo.basicInfo.family}
@@ -501,12 +501,309 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
                           )}
                           {careInfo.basicInfo.origin && (
                             <View style={styles.infoRow}>
-                              <MaterialIcons name="place" size={18} color="#2E7D32" style={styles.infoIcon} />
+                              <MaterialIcons name="public" size={18} color="#0288D1" style={styles.infoIcon} />
                               <Text style={styles.infoText}>
                                 <Text style={styles.infoLabel}>Origin: </Text>
                                 {careInfo.basicInfo.origin}
                               </Text>
                             </View>
+                          )}
+                        </View>
+                      )}
+                      {/* End Basic Info - removed duplicate rendering */}
+
+                      {/* Lifespan */}
+                      {careInfo.basicInfo?.lifespan && (
+                        <View style={styles.infoRow}>
+                          <MaterialIcons name="hourglass-empty" size={18} color="#1976D2" style={styles.infoIcon} />
+                          <Text style={styles.infoText}>
+                            <Text style={styles.infoLabel}>Lifespan: </Text>
+                            {careInfo.basicInfo.lifespan}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Growth Rate */}
+                      {careInfo.basicInfo?.growthRate && (
+                        <View style={styles.infoRow}>
+                          <MaterialIcons name="trending-up" size={18} color="#388E3C" style={styles.infoIcon} />
+                          <Text style={styles.infoText}>
+                            <Text style={styles.infoLabel}>Growth Rate: </Text>
+                            {careInfo.basicInfo.growthRate}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Mature Size */}
+                      {careInfo.basicInfo?.matureSize && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Mature Size</Text>
+                          {careInfo.basicInfo.matureSize.height && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Height: </Text>
+                              {careInfo.basicInfo.matureSize.height}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.matureSize.width && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Width: </Text>
+                              {careInfo.basicInfo.matureSize.width}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.matureSize.indoorVsOutdoor && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Indoor vs Outdoor: </Text>
+                              {careInfo.basicInfo.matureSize.indoorVsOutdoor}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Appearance */}
+                      {careInfo.basicInfo?.appearance && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Appearance</Text>
+                          {careInfo.basicInfo.appearance.leaves && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Leaves: </Text>
+                              {careInfo.basicInfo.appearance.leaves}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.appearance.flowers && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Flowers: </Text>
+                              {careInfo.basicInfo.appearance.flowers}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.appearance.stem && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Stem: </Text>
+                              {careInfo.basicInfo.appearance.stem}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.appearance.roots && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Roots: </Text>
+                              {careInfo.basicInfo.appearance.roots}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      {/* No duplicative rendering */}
+
+                      {/* Toxicity (detailed) */}
+                      {careInfo.basicInfo?.toxicity && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Toxicity</Text>
+                          {careInfo.basicInfo.toxicity.level && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Level: </Text>
+                              {careInfo.basicInfo.toxicity.level}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.toxicity.affected && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Affected: </Text>
+                              {careInfo.basicInfo.toxicity.affected}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.toxicity.symptoms && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Symptoms: </Text>
+                              {careInfo.basicInfo.toxicity.symptoms}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.toxicity.firstAid && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>First Aid: </Text>
+                              {careInfo.basicInfo.toxicity.firstAid}
+                            </Text>
+                          )}
+                          {careInfo.basicInfo.toxicity.veterinaryAttention && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Veterinary Attention: </Text>
+                              {careInfo.basicInfo.toxicity.veterinaryAttention}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Fun Facts */}
+                      {careInfo.additionalInfo?.funFacts && Array.isArray(careInfo.additionalInfo.funFacts) && careInfo.additionalInfo.funFacts.length > 0 && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Fun Facts</Text>
+                          {careInfo.additionalInfo.funFacts.map((fact, idx) => (
+                            <Text key={idx} style={styles.infoText}>
+                              {typeof fact === 'string' ? fact : fact.fact}
+                              {fact.details ? ` (${fact.details})` : ''}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Symbolism */}
+                      {careInfo.additionalInfo?.symbolism && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Symbolism</Text>
+                          <Text style={styles.infoText}>{careInfo.additionalInfo.symbolism}</Text>
+                        </View>
+                      )}
+
+                      {/* Common Uses */}
+                      {careInfo.additionalInfo?.commonUses && Array.isArray(careInfo.additionalInfo.commonUses) && careInfo.additionalInfo.commonUses.length > 0 && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Common Uses</Text>
+                          {careInfo.additionalInfo.commonUses.map((use, idx) => (
+                            <Text key={idx} style={styles.infoText}>{use}</Text>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Notable Varieties */}
+                      {careInfo.additionalInfo?.varieties && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Notable Varieties</Text>
+                          <Text style={styles.infoText}>{careInfo.additionalInfo.varieties}</Text>
+                        </View>
+                      )}
+
+                      {/* Air Purifying Qualities */}
+                      {careInfo.additionalInfo?.airPurifying && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Air Purifying Qualities</Text>
+                          <Text style={styles.infoText}>{careInfo.additionalInfo.airPurifying}</Text>
+                        </View>
+                      )}
+
+                      {/* Wildlife Attraction */}
+                      {careInfo.additionalInfo?.wildlifeAttraction && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Wildlife Attraction</Text>
+                          <Text style={styles.infoText}>{careInfo.additionalInfo.wildlifeAttraction}</Text>
+                        </View>
+                      )}
+
+                      {/* Companion Plants */}
+                      {careInfo.additionalInfo?.companionPlants && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Companion Plants</Text>
+                          <Text style={styles.infoText}>{careInfo.additionalInfo.companionPlants}</Text>
+                        </View>
+                      )}
+
+                      {/* Propagation */}
+                      {careInfo.propagation && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Propagation</Text>
+                          {careInfo.propagation.methods && Array.isArray(careInfo.propagation.methods) && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Methods: </Text>
+                              {careInfo.propagation.methods.map((m, i) => (typeof m === 'string' ? m : m.name)).join(', ')}
+                            </Text>
+                          )}
+                          {careInfo.propagation.bestTime && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Best Time: </Text>
+                              {careInfo.propagation.bestTime}
+                            </Text>
+                          )}
+                          {careInfo.propagation.difficulty && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Difficulty: </Text>
+                              {careInfo.propagation.difficulty}
+                            </Text>
+                          )}
+                          {careInfo.propagation.commonMistakes && (
+                            <Text style={styles.infoText}>
+                              <Text style={styles.infoLabel}>Common Mistakes: </Text>
+                              {careInfo.propagation.commonMistakes}
+                            </Text>
+                          )}
+                          {Array.isArray(careInfo.propagation.methods) && careInfo.propagation.methods.map((m, i) => (
+                            m.steps && (
+                              <View key={i} style={{marginLeft: 12}}>
+                                <Text style={styles.infoLabel}>{m.name} Steps:</Text>
+                                {Array.isArray(m.steps) ? m.steps.map((step, j) => (
+                                  <Text key={j} style={styles.infoText}>- {step}</Text>
+                                )) : null}
+                                {m.aftercare && <Text style={styles.infoText}><Text style={styles.infoLabel}>Aftercare: </Text>{m.aftercare}</Text>}
+                                {m.timeToRoot && <Text style={styles.infoText}><Text style={styles.infoLabel}>Time to Root: </Text>{m.timeToRoot}</Text>}
+                                {m.tips && <Text style={styles.infoText}><Text style={styles.infoLabel}>Tips: </Text>{m.tips}</Text>}
+                              </View>
+                            )
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Troubleshooting */}
+                      {careInfo.troubleshooting && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Troubleshooting</Text>
+                          {careInfo.troubleshooting.yellowLeaves && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Yellow Leaves: </Text>{careInfo.troubleshooting.yellowLeaves}</Text>
+                          )}
+                          {careInfo.troubleshooting.brownTips && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Brown Tips: </Text>{careInfo.troubleshooting.brownTips}</Text>
+                          )}
+                          {careInfo.troubleshooting.droppingLeaves && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Dropping Leaves: </Text>{careInfo.troubleshooting.droppingLeaves}</Text>
+                          )}
+                          {careInfo.troubleshooting.noFlowers && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>No Flowers: </Text>{careInfo.troubleshooting.noFlowers}</Text>
+                          )}
+                          {careInfo.troubleshooting.pestControl && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Pest Control: </Text>{careInfo.troubleshooting.pestControl}</Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Pests and Diseases */}
+                      {careInfo.pestsAndDiseases && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Pests & Diseases</Text>
+                          {careInfo.pestsAndDiseases.commonPests && Array.isArray(careInfo.pestsAndDiseases.commonPests) && careInfo.pestsAndDiseases.commonPests.length > 0 && (
+                            <View>
+                              <Text style={styles.infoLabel}>Common Pests:</Text>
+                              {careInfo.pestsAndDiseases.commonPests.map((pest, idx) => (
+                                <Text key={idx} style={styles.infoText}>
+                                  {pest.name}: {pest.identification} {pest.damage ? `- Damage: ${pest.damage}` : ''} {pest.treatment ? `- Treatment: ${pest.treatment}` : ''} {pest.prevention ? `- Prevention: ${pest.prevention}` : ''}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                          {careInfo.pestsAndDiseases.commonDiseases && Array.isArray(careInfo.pestsAndDiseases.commonDiseases) && careInfo.pestsAndDiseases.commonDiseases.length > 0 && (
+                            <View>
+                              <Text style={styles.infoLabel}>Common Diseases:</Text>
+                              {careInfo.pestsAndDiseases.commonDiseases.map((disease, idx) => (
+                                <Text key={idx} style={styles.infoText}>
+                                  {disease.name}: {disease.symptoms} {disease.treatment ? `- Treatment: ${disease.treatment}` : ''} {disease.prevention ? `- Prevention: ${disease.prevention}` : ''}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                          {careInfo.pestsAndDiseases.prevention && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>General Prevention: </Text>{careInfo.pestsAndDiseases.prevention}</Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Seasonal Care (simplified, Care Guide style) */}
+                      {careInfo.seasonalCare && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Seasonal Care</Text>
+                          {['spring', 'summer', 'fall', 'winter'].map(season => (
+                            careInfo.seasonalCare[season] && (
+                              <View key={season} style={{marginBottom: 8}}>
+                                <Text style={styles.infoLabel}>{season.charAt(0).toUpperCase() + season.slice(1)}: </Text>
+                                <Text style={styles.infoText}>{typeof careInfo.seasonalCare[season] === 'string' ? careInfo.seasonalCare[season] : Object.values(careInfo.seasonalCare[season]).join(' ')}</Text>
+                              </View>
+                            )
+                          ))}
+                          {careInfo.seasonalCare.seasonalBlooming && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Seasonal Blooming: </Text>{careInfo.seasonalCare.seasonalBlooming}</Text>
+                          )}
+                          {careInfo.seasonalCare.seasonalGrowthPatterns && (
+                            <Text style={styles.infoText}><Text style={styles.infoLabel}>Growth Patterns: </Text>{careInfo.seasonalCare.seasonalGrowthPatterns}</Text>
                           )}
                         </View>
                       )}
@@ -526,14 +823,7 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
                           <Text style={styles.infoText}>{careInfo.naturalHabitat}</Text>
                         </View>
                       )}
-
-                      {/* Toxicity */}
-                      {careInfo.toxicity && (
-                        <View style={styles.infoSection}>
-                          <Text style={styles.sectionTitle}>Toxicity</Text>
-                          <Text style={styles.infoText}>{careInfo.toxicity}</Text>
-                        </View>
-                      )}
+                      {/* Remove duplicate and summary-only toxicity (already detailed above) */}
                     </ScrollView>
                   ) : (
                     <View style={[styles.centered, {padding: 40}]}>
