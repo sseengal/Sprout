@@ -5,6 +5,9 @@ import { useColorScheme } from 'react-native';
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   
+  // Always show the login screen first
+  // No need for loading state or auth checks
+  
   return (
     <>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
@@ -19,6 +22,12 @@ export default function RootLayout() {
           },
         }}
       >
+        <Stack.Screen 
+          name="index"
+          options={{
+            headerShown: false,
+          }}
+        />
         <Stack.Screen 
           name="(tabs)"
           options={{
