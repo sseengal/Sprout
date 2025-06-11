@@ -256,61 +256,58 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
       }
       
       try {
-        let careTips = null;
-        let details = null;
+        // Check for existing Gemini data in the new format
+        if (plantData.plantInfo) {
+          setCareInfo({
+            ...plantData.plantInfo,
+            source: 'Gemini AI',
+            hasGeminiData: true
+          });
+          return;
+        }
         
-        // Check for existing Gemini data
-        if (plantData.careTips && plantData.details) {
-          careTips = plantData.careTips;
-          details = plantData.details;
-        } 
         // If we have a plant name but no Gemini data, fetch it
-        else if (plantData.suggestions?.[0]?.plant_details?.common_names?.[0] || 
-                plantData.housePlantData?.commonNames?.[0]) {
-          const plantName = plantData.suggestions?.[0]?.plant_details?.common_names?.[0] || 
-                          plantData.housePlantData.commonNames[0];
-          
-          console.log('Fetching care info for:', plantName);
-          const geminiInfo = await getAllPlantInfo(plantName);
-          
-          if (geminiInfo.care && geminiInfo.details) {
-            careTips = geminiInfo.care;
-            details = geminiInfo.details;
-          } else {
-            console.log('No Gemini data available for:', plantName);
-            setCareInfo({
-              careTips: 'No care information available for this plant.',
-              details: 'No additional details available.',
-              source: 'Gemini AI',
-              hasGeminiData: false
-            });
-            return;
-          }
-        } else {
+        const plantName = plantData.suggestions?.[0]?.plant_details?.common_names?.[0] || 
+                        plantData.housePlantData?.commonNames?.[0];
+        
+        if (!plantName) {
           console.log('No plant name available to fetch care info');
           setCareInfo({
-            careTips: 'No plant name available to fetch care information.',
-            details: 'No additional details available.',
-            source: 'Gemini AI',
+            basicInfo: { name: 'Unknown Plant' },
+            careGuide: { summary: 'No care information available for this plant.' },
+            source: 'Error',
             hasGeminiData: false
           });
           return;
         }
         
-        // Set the care info with Gemini data
-        setCareInfo({
-          careTips,
-          details,
-          source: 'Gemini AI',
-          hasGeminiData: true
-        });
+        console.log('Fetching plant info for:', plantName);
+        const plantInfo = await getAllPlantInfo(plantName);
+        
+        if (plantInfo) {
+          setCareInfo({
+            ...plantInfo,
+            source: 'Gemini AI',
+            hasGeminiData: true
+          });
+        } else {
+          console.log('No Gemini data available for:', plantName);
+          setCareInfo({
+            basicInfo: { name: plantName },
+            careGuide: { summary: 'No care information available for this plant.' },
+            source: 'Gemini AI',
+            hasGeminiData: false
+          });
+        }
         
       } catch (error) {
-        console.error('Error fetching care info from Gemini:', error);
+        console.error('Error fetching plant info from Gemini:', error);
         setCareInfo({
-          careTips: 'Failed to load care information. Please check your connection and try again.',
-          details: 'Failed to load plant details.',
-          source: 'Gemini AI',
+          basicInfo: { name: getPlantName() },
+          careGuide: { 
+            summary: 'Could not fetch plant information. Please check your internet connection and try again.'
+          },
+          source: 'Error',
           hasGeminiData: false
         });
       }
@@ -479,53 +476,346 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
               {activeTab === 'details' ? (
                 <View style={styles.section}>
                   {careInfo?.hasGeminiData ? (
-                    <FormattedText content={careInfo.details} type="details" />
-                  ) : (
-                    <View style={styles.sectionContent}>
-                      {careInfo?.family && (
-                        <View style={styles.infoRow}>
-                          <MaterialIcons name="family-restroom" size={18} color="#757575" style={styles.infoIcon} />
-                          <View>
-                            <Text style={styles.infoLabel}>Family</Text>
-                            <Text style={styles.infoText}>{careInfo.family}</Text>
-                          </View>
+                    <ScrollView style={styles.detailsScroll}>
+                      {/* Basic Info */}
+                      {careInfo.basicInfo && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Basic Information</Text>
+                          {careInfo.basicInfo.scientificName && (
+                            <View style={styles.infoRow}>
+                              <MaterialIcons name="science" size={18} color="#2E7D32" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Scientific Name: </Text>
+                                {careInfo.basicInfo.scientificName}
+                              </Text>
+                            </View>
+                          )}
+                          {careInfo.basicInfo.family && (
+                            <View style={styles.infoRow}>
+                              <MaterialIcons name="family-restroom" size={18} color="#2E7D32" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Family: </Text>
+                                {careInfo.basicInfo.family}
+                              </Text>
+                            </View>
+                          )}
+                          {careInfo.basicInfo.origin && (
+                            <View style={styles.infoRow}>
+                              <MaterialIcons name="place" size={18} color="#2E7D32" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Origin: </Text>
+                                {careInfo.basicInfo.origin}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       )}
-                      
-                      {careInfo?.origin && (
-                        <View style={styles.infoRow}>
-                          <MaterialIcons name="place" size={18} color="#757575" style={styles.infoIcon} />
-                          <View>
-                            <Text style={styles.infoLabel}>Origin</Text>
-                            <Text style={styles.infoText}>{careInfo.origin}</Text>
-                          </View>
+
+                      {/* Description */}
+                      {careInfo.description && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Description</Text>
+                          <Text style={styles.infoText}>{careInfo.description}</Text>
                         </View>
                       )}
-                      
-                      {careInfo?.source && (
-                        <View style={styles.infoRow}>
-                          <MaterialIcons name="source" size={18} color="#757575" style={styles.infoIcon} />
-                          <View>
-                            <Text style={styles.infoLabel}>Source</Text>
-                            <Text style={styles.infoText}>{careInfo.source}</Text>
-                          </View>
+
+                      {/* Natural Habitat */}
+                      {careInfo.naturalHabitat && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Natural Habitat</Text>
+                          <Text style={styles.infoText}>{careInfo.naturalHabitat}</Text>
                         </View>
                       )}
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.section}>
-                  {careInfo?.hasGeminiData ? (
-                    <FormattedText 
-                      content={careInfo.careTips}
-                      type="care" 
-                    />
+
+                      {/* Toxicity */}
+                      {careInfo.toxicity && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Toxicity</Text>
+                          <Text style={styles.infoText}>{careInfo.toxicity}</Text>
+                        </View>
+                      )}
+                    </ScrollView>
                   ) : (
                     <View style={[styles.centered, {padding: 40}]}>
                       <ActivityIndicator size="large" color="#2E7D32" />
                       <Text style={{marginTop: 20, color: '#666', textAlign: 'center'}}>
-                        Loading care information from Gemini...
+                        Loading plant details...
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                // Care Guide Tab
+                <View style={styles.section}>
+                  {careInfo?.hasGeminiData ? (
+                    <ScrollView style={styles.detailsScroll}>
+                      {/* Care Guide Summary */}
+                      {careInfo.careGuide?.summary && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>Care Summary</Text>
+                          <Text style={styles.infoText}>{careInfo.careGuide.summary}</Text>
+                        </View>
+                      )}
+
+                      {/* Watering */}
+                      {careInfo.careGuide?.watering && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="opacity" size={18} color="#2E7D32" /> Watering
+                          </Text>
+                          {typeof careInfo.careGuide.watering === 'string' ? (
+                            <Text style={styles.infoText}>{careInfo.careGuide.watering}</Text>
+                          ) : (
+                            <View>
+                              {careInfo.careGuide.watering.frequency && (
+                                <View style={styles.infoRow}>
+                                  <MaterialIcons name="schedule" size={18} color="#2E7D32" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Frequency: </Text>
+                                    {careInfo.careGuide.watering.frequency}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.watering.method && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="water-drop" size={18} color="#2E7D32" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Method: </Text>
+                                    {careInfo.careGuide.watering.method}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.watering.signs && (
+                                <View style={{marginTop: 10}}>
+                                  <Text style={[styles.infoLabel, {marginBottom: 4}]}>Signs to watch for:</Text>
+                                  {careInfo.careGuide.watering.signs.overwatered && (
+                                    <View style={styles.infoRow}>
+                                      <MaterialIcons name="error-outline" size={16} color="#D32F2F" style={{marginRight: 8}} />
+                                      <Text style={styles.infoText}>
+                                        <Text style={[styles.infoLabel, {color: '#D32F2F'}]}>Overwatered: </Text>
+                                        {careInfo.careGuide.watering.signs.overwatered}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {careInfo.careGuide.watering.signs.underwatered && (
+                                    <View style={[styles.infoRow, {marginTop: 4}]}>
+                                      <MaterialIcons name="error-outline" size={16} color="#1976D2" style={{marginRight: 8}} />
+                                      <Text style={styles.infoText}>
+                                        <Text style={[styles.infoLabel, {color: '#1976D2'}]}>Underwatered: </Text>
+                                        {careInfo.careGuide.watering.signs.underwatered}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Light */}
+                      {careInfo.careGuide?.light && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="wb-sunny" size={18} color="#FFA000" /> Light
+                          </Text>
+                          {typeof careInfo.careGuide.light === 'string' ? (
+                            <Text style={styles.infoText}>{careInfo.careGuide.light}</Text>
+                          ) : (
+                            <View>
+                              {careInfo.careGuide.light.requirements && (
+                                <View style={styles.infoRow}>
+                                  <MaterialIcons name="lightbulb-outline" size={18} color="#FFA000" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Requirements: </Text>
+                                    {careInfo.careGuide.light.requirements}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.light.tolerance && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="brightness-medium" size={18} color="#FFA000" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Tolerance: </Text>
+                                    {careInfo.careGuide.light.tolerance}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.light.idealLocation && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="location-on" size={18} color="#FFA000" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Ideal Location: </Text>
+                                    {careInfo.careGuide.light.idealLocation}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Environment - Temperature & Humidity */}
+                      {careInfo.careGuide?.environment && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="thermostat" size={18} color="#D32F2F" /> Environment
+                          </Text>
+                          {careInfo.careGuide.environment.temperature?.ideal && (
+                            <View style={styles.infoRow}>
+                              <MaterialIcons name="device-thermostat" size={18} color="#D32F2F" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Ideal Temperature: </Text>
+                                {careInfo.careGuide.environment.temperature.ideal}
+                              </Text>
+                            </View>
+                          )}
+                          {(careInfo.careGuide.environment.temperature?.minTemp || careInfo.careGuide.environment.temperature?.maxTemp) && (
+                            <View style={[styles.infoRow, {marginTop: 8}]}>
+                              <MaterialIcons name="straighten" size={18} color="#D32F2F" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Temperature Range: </Text>
+                                {careInfo.careGuide.environment.temperature.minTemp || 'N/A'} - {careInfo.careGuide.environment.temperature.maxTemp || 'N/A'}°C
+                              </Text>
+                            </View>
+                          )}
+                          {careInfo.careGuide.environment.humidity && (
+                            <View style={[styles.infoRow, {marginTop: 8}]}>
+                              <MaterialIcons name="opacity" size={18} color="#1976D2" style={styles.infoIcon} />
+                              <Text style={styles.infoText}>
+                                <Text style={styles.infoLabel}>Humidity: </Text>
+                                {careInfo.careGuide.environment.humidity}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Soil & Fertilizer */}
+                      {careInfo.careGuide?.soil && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="grass" size={18} color="#5D4037" /> Soil & Potting
+                          </Text>
+                          {typeof careInfo.careGuide.soil === 'string' ? (
+                            <Text style={styles.infoText}>{careInfo.careGuide.soil}</Text>
+                          ) : (
+                            <View>
+                              {careInfo.careGuide.soil.type && (
+                                <View style={styles.infoRow}>
+                                  <MaterialIcons name="layers" size={18} color="#5D4037" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Type: </Text>
+                                    {careInfo.careGuide.soil.type}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.soil.ph && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="science" size={18} color="#5D4037" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>pH Level: </Text>
+                                    {careInfo.careGuide.soil.ph}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.soil.drainage && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="opacity" size={18} color="#5D4037" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Drainage: </Text>
+                                    {careInfo.careGuide.soil.drainage}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Fertilizer */}
+                      {careInfo.careGuide?.feeding && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="eco" size={18} color="#689F38" /> Feeding & Nutrition
+                          </Text>
+                          {typeof careInfo.careGuide.feeding === 'string' ? (
+                            <Text style={styles.infoText}>{careInfo.careGuide.feeding}</Text>
+                          ) : (
+                            <View>
+                              {careInfo.careGuide.feeding.fertilizer && (
+                                <View style={styles.infoRow}>
+                                  <MaterialIcons name="eco" size={18} color="#689F38" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Fertilizer: </Text>
+                                    {careInfo.careGuide.feeding.fertilizer}
+                                  </Text>
+                                </View>
+                              )}
+                              {careInfo.careGuide.feeding.schedule && (
+                                <View style={[styles.infoRow, {marginTop: 8}]}>
+                                  <MaterialIcons name="event" size={18} color="#689F38" style={styles.infoIcon} />
+                                  <Text style={styles.infoText}>
+                                    <Text style={styles.infoLabel}>Schedule: </Text>
+                                    {careInfo.careGuide.feeding.schedule}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Common Issues */}
+                      {careInfo.commonIssues && (
+                        <View style={styles.infoSection}>
+                          <Text style={styles.sectionTitle}>
+                            <MaterialIcons name="warning" size={18} color="#F57C00" /> Common Issues
+                          </Text>
+                          {Array.isArray(careInfo.commonIssues) ? (
+                            careInfo.commonIssues.map((issue, index) => (
+                              <View key={index} style={[styles.infoSection, {marginBottom: 16, backgroundColor: '#FFF8F0'}]}>
+                                {issue.problem && (
+                                  <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+                                    <MaterialIcons name="warning" size={18} color="#F57C00" style={{marginRight: 8}} />
+                                    <Text style={[styles.infoLabel, {color: '#F57C00', fontSize: 14, textTransform: 'none'}]}>
+                                      {issue.problem}
+                                    </Text>
+                                  </View>
+                                )}
+                                {issue.symptoms && (
+                                  <View style={{marginBottom: 8}}>
+                                    <Text style={[styles.infoLabel, {color: '#5D4037', marginBottom: 4}]}>Symptoms:</Text>
+                                    <Text style={styles.infoText}>{issue.symptoms}</Text>
+                                  </View>
+                                )}
+                                {issue.solution && (
+                                  <View style={{marginBottom: 8}}>
+                                    <Text style={[styles.infoLabel, {color: '#2E7D32', marginBottom: 4}]}>Solution:</Text>
+                                    <Text style={styles.infoText}>{issue.solution}</Text>
+                                  </View>
+                                )}
+                                {issue.prevention && (
+                                  <View>
+                                    <Text style={[styles.infoLabel, {color: '#1976D2', marginBottom: 4}]}>Prevention:</Text>
+                                    <Text style={styles.infoText}>{issue.prevention}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            ))
+                          ) : typeof careInfo.commonIssues === 'string' ? (
+                            <Text style={styles.infoText}>{careInfo.commonIssues}</Text>
+                          ) : (
+                            <Text style={styles.infoText}>No common issues information available.</Text>
+                          )}
+                        </View>
+                      )}
+                    </ScrollView>
+                  ) : (
+                    <View style={[styles.centered, {padding: 40}]}>
+                      <ActivityIndicator size="large" color="#2E7D32" />
+                      <Text style={{marginTop: 20, color: '#666', textAlign: 'center'}}>
+                        Loading care information...
                       </Text>
                     </View>
                   )}
@@ -571,11 +861,33 @@ const PlantDetailsScreen = ({ plantData, imageUri }) => {
 };
 
 const styles = StyleSheet.create({
-  // Base styles
+  // Base container and layout
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  
+  // Scroll view and content
+  detailsScroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  detailsContainer: {
+    width: '100%',
+    padding: 16,
+  },
+  
   // Section styles
   sectionContainer: {
     width: '100%',
@@ -590,37 +902,38 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-    color: '#333',
-  },
   sectionContent: {
     padding: 16,
   },
-  sourceBadge: {
-    marginLeft: 'auto',
-    backgroundColor: '#e8f5e9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  
+  // Info section styles
+  infoSection: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  sourceBadgeText: {
-    fontSize: 12,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#2E7D32',
-    fontWeight: '500',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 8,
   },
+  
   // Info row styles
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 12,
     paddingHorizontal: 16,
-  },
-  infoIcon: {
-    marginRight: 12,
-    marginTop: 2,
   },
   infoLabel: {
     fontSize: 12,
@@ -630,10 +943,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   infoText: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 15,
     color: '#212121',
     lineHeight: 22,
   },
+  infoIcon: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  
   // Care item styles
   careItem: {
     flexDirection: 'row',
@@ -663,6 +982,7 @@ const styles = StyleSheet.create({
     color: '#424242',
     lineHeight: 22,
   },
+  
   // Care tip styles
   careTipItem: {
     flexDirection: 'row',
@@ -683,6 +1003,7 @@ const styles = StyleSheet.create({
     color: '#424242',
     lineHeight: 22,
   },
+  
   // Special care elements
   wateringInfo: {
     flexDirection: 'row',
@@ -729,12 +1050,21 @@ const styles = StyleSheet.create({
     color: '#5D4037',
     flex: 1,
   },
-  // Formatted text styles
-  detailsContainer: {
-    width: '100%',
-    padding: 16,
-  },
+  
   // Header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
   headerText: {
     fontWeight: 'bold',
     color: '#000',
@@ -759,13 +1089,20 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
   },
-  // Paragraph styles
+  
+  // Text styles
   paragraph: {
     fontSize: 15,
     lineHeight: 22,
     color: '#333',
     marginBottom: 12,
   },
+  detailsText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#424242',
+  },
+  
   // List styles
   listContainer: {
     marginBottom: 12,
@@ -785,6 +1122,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#333',
   },
+  
   // Code block styles
   codeBlock: {
     backgroundColor: '#f5f5f5',
@@ -797,36 +1135,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  // Details text
-  detailsText: {
-    fontSize: 15,
-    lineHeight: 24,
-    color: '#424242',
+  
+  // Source badge
+  sourceBadge: {
+    marginLeft: 'auto',
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  // Rest of the styles
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  sourceBadgeText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '500',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
+  
+  // Error and button styles
   errorText: {
     fontSize: 16,
     color: '#f44336',
@@ -845,10 +1169,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  
+  // Image styles
   imageContainer: {
     width: '100%',
     height: width * 0.8,
     backgroundColor: '#f5f5f5',
+  },
+  plantImage: {
+    width: '100%',
+    height: '100%',
+  },
+  
+  // Plant info styles
+  infoContainer: {
+    padding: 16,
+  },
+  nameContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  plantName: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  scientificName: {
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  confidenceContainer: {
+    backgroundColor: '#E8F5E9',
+    padding: 8,
+    borderRadius: 4,
+    alignSelf: 'center',
   },
   plantImage: {
     width: '100%',
