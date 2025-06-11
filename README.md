@@ -1,50 +1,105 @@
-# Welcome to your Expo app 👋
+# 🌱 Sprout - Plant Care App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Sprout is a mobile application that helps users identify plants and get personalized care instructions. Simply take a photo of a plant, and Sprout will identify it and provide you with detailed care instructions.
 
-## Get started
+## Features
 
-1. Install dependencies
+- 🌿 Real-time plant identification using your device's camera
+- 📸 Upload photos from your gallery
+- 📝 Detailed plant information and care instructions
+- 🌞 Sunlight, watering, and temperature requirements
+- 💾 Save your favorite plants for quick reference
+- 🌎 Wikipedia integration for more information
+
+## Prerequisites
+
+- Node.js (v14 or later)
+- npm or yarn
+- Expo CLI (`npm install -g expo-cli`)
+- A physical device with the [Expo Go](https://expo.dev/client) app installed or an emulator/simulator
+
+## Getting Started
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/yourusername/sprout-plant-app.git
+   cd sprout-plant-app
+   ```
+
+2. **Install dependencies**
 
    ```bash
    npm install
+   # or
+   yarn install
    ```
 
-2. Start the app
+3. **Set up environment variables**
+
+   Create a `.env` file in the root directory and add your Plant.id API key:
+
+   ```env
+   PLANT_ID_API_KEY=your_plant_id_api_key_here
+   ```
+
+   Get your API key from [Plant.id](https://web.plant.id/).
+
+4. **Start the development server**
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+5. **Run the app**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   - **On a physical device**:
+     1. Install the Expo Go app on your iOS or Android device
+     2. Scan the QR code shown in the terminal or in the browser with your device's camera
+     
+   - **On an emulator/simulator**:
+     - Press `i` for iOS simulator
+     - Press `a` for Android emulator
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Project Structure
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+sprout/
+├── assets/                # Images, fonts, and other static files
+├── src/
+│   ├── components/       # Reusable UI components
+│   ├── config/            # App configuration and constants
+│   ├── navigation/        # Navigation configuration
+│   ├── screens/           # App screens
+│   ├── services/          # API and business logic
+│   └── utils/             # Helper functions
+├── App.js                 # Main application component
+└── app.json              # Expo configuration
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Dependencies
 
-## Learn more
+- [Expo](https://expo.dev/) - Framework for building cross-platform mobile apps
+- [React Navigation](https://reactnavigation.org/) - Routing and navigation
+- [Expo Camera](https://docs.expo.dev/versions/latest/sdk/camera/) - Access device camera
+- [Expo Image Picker](https://docs.expo.dev/versions/latest/sdk/imagepicker/) - Select images from device gallery
+- [Axios](https://axios-http.com/) - HTTP client for API requests
+- [React Native Paper](https://callstack.github.io/react-native-paper/) - Material Design components
 
-To learn more about developing your project with Expo, look at the following resources:
+## API Used
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- [Plant.id](https://web.plant.id/) - Plant identification API
 
-## Join the community
+## Contributing
 
-Join our community of developers creating universal apps.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+- [Expo](https://expo.dev/) for the amazing development experience
+- [Plant.id](https://web.plant.id/) for the plant identification API
+- All the open-source libraries used in this project
