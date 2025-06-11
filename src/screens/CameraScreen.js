@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator, Ale
 import { Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { identifyPlant } from '../services/plantService';
 
 export default function CameraScreen() {
@@ -12,7 +12,7 @@ export default function CameraScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
   const cameraRef = useRef(null);
-  const navigation = useNavigation();
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -46,7 +46,7 @@ export default function CameraScreen() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'Images',
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -69,8 +69,32 @@ export default function CameraScreen() {
     setIsLoading(true);
     try {
       const result = await identifyPlant(base64Image);
-      if (result && result.suggestions && result.suggestions.length > 0) {
-        navigation.navigate('PlantDetails', { plantData: result.suggestions[0] });
+      console.log('Plant identification results:', JSON.stringify(result, null, 2));
+      
+      if (result) {
+        // Navigate to PlantDetails with the complete result
+        router.push({
+          pathname: '/plant-details',
+          params: {
+            plantData: JSON.stringify({
+              ...result,
+              // Ensure we have the plant name and details in the expected format
+              plant_name: result.plantName || (result.suggestions && result.suggestions[0]?.plant_name) || 'Unknown Plant',
+              plant_details: {
+                ...result.housePlantData,
+                // Add any additional details from the API response
+                scientific_name: [result.suggestions?.[0]?.plant_name || 'Unknown'],
+                taxonomy: {
+                  family: result.housePlantData?.family || 'Unknown',
+                  genus: result.suggestions?.[0]?.plant_name?.split(' ')[0] || 'Unknown'
+                },
+                // Add care tips if available
+                care_tips: result.careTips || []
+              },
+              probability: result.suggestions?.[0]?.probability || 0
+            })
+          }
+        });
       } else {
         Alert.alert('No matches found', 'We couldn\'t identify this plant. Please try with a clearer image.');
       }

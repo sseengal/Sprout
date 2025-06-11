@@ -82,7 +82,7 @@ const CameraScreen = () => {
       
       // Navigate to results screen with the plant data
       router.push({
-        pathname: '/plant-details/index',
+        pathname: '/plant-details',
         params: { 
           plantData: JSON.stringify(plantData),
           imageUri: image

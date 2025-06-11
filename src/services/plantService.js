@@ -31,29 +31,10 @@ export const identifyPlant = async (imageUri) => {
     const topSuggestion = plantNetData.suggestions[0];
     console.log('Top suggestion:', topSuggestion.plant_name);
     
-    // Try to find a match in House Plants API
-    let housePlantData = null;
-    try {
-      console.log('Searching House Plants API for:', topSuggestion.plant_name);
-      const searchResults = await housePlantProvider.searchPlants(topSuggestion.plant_name);
-      
-      if (searchResults && searchResults.length > 0) {
-        // Get the first result
-        const plantId = searchResults[0]._id;
-        console.log(`Found House Plant ID: ${plantId}`);
-        
-        // Get detailed information
-        const plantDetails = await housePlantProvider.getPlantDetails(plantId);
-        if (plantDetails) {
-          housePlantData = housePlantProvider.formatPlantData(plantDetails);
-          console.log('Successfully retrieved plant details from House Plants API');
-        }
-      } else {
-        console.log('No matching plants found in House Plants API');
-      }
-    } catch (error) {
-      console.warn('Error fetching from House Plants API:', error.message);
-    }
+    // Skip House Plants API for now as it's causing 404 errors
+    // We'll rely on PlantNet data and fallback care tips
+    console.log('Skipping House Plants API due to known issues');
+    const housePlantData = null;
     
     // Prepare the result
     const result = {
@@ -68,18 +49,16 @@ export const identifyPlant = async (imageUri) => {
     
     // Function to get default care tips for common plants
     const getDefaultCareTips = (plantName) => {
-      const defaultTips = [];
-      const lowerName = plantName.toLowerCase();
-      
-      // Add general care tips for all plants
-      defaultTips.push(
+      const defaultTips = [
         'Water when the top inch of soil feels dry to the touch.',
         'Provide bright, indirect sunlight for optimal growth.',
         'Use well-draining soil to prevent root rot.',
         'Rotate the plant occasionally for even growth.'
-      );
+      ];
       
-      // Add specific tips for common plant types
+      const lowerName = plantName.toLowerCase();
+      
+      // Add plant-specific tips based on common plant types
       if (lowerName.includes('philodendron')) {
         defaultTips.push(
           'Philodendrons prefer medium to bright indirect light.',
@@ -115,15 +94,12 @@ export const identifyPlant = async (imageUri) => {
       return defaultTips;
     };
     
-    // Add care tips from House Plants API if available
-    if (housePlantData?.careTips?.length > 0) {
-      result.careTips = [...housePlantData.careTips];
-    } else if (topSuggestion.plant_details?.wiki_description?.value) {
-      // Fallback to PlantNet wiki description if available
+    // Initialize care tips with default ones based on plant name
+    result.careTips = getDefaultCareTips(topSuggestion.plant_name);
+    
+    // Add PlantNet wiki description if available
+    if (topSuggestion.plant_details?.wiki_description?.value) {
       result.careTips.push(topSuggestion.plant_details.wiki_description.value);
-    } else {
-      // Fallback to default care tips based on plant name
-      result.careTips = getDefaultCareTips(topSuggestion.plant_name);
     }
     
     console.log('Final identification result:', {

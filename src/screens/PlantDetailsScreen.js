@@ -4,26 +4,40 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function PlantDetailsScreen({ route, navigation }) {
   const { plantData } = route.params || {};
-  const { plant_name, plant_details } = plantData || {};
+  const { plant_name, plant_details, careTips = [] } = plantData || {};
   
   // Fallback data in case the API doesn't return all fields
   const plantInfo = {
     commonName: plant_name || 'Unknown Plant',
-    scientificName: plant_details?.scientific_name?.[0] || 'Not available',
+    scientificName: Array.isArray(plant_details?.scientific_name) 
+      ? plant_details.scientific_name[0] 
+      : (plant_details?.scientific_name || 'Not available'),
     family: plant_details?.taxonomy?.family || 'Not available',
     genus: plant_details?.taxonomy?.genus || 'Not available',
     wikiUrl: plant_details?.url || null,
     probability: plantData?.probability ? Math.round(plantData.probability * 100) : 0,
     
-    // Care information (in a real app, this would come from the API or a database)
+    // Care information from the API or default values
     careTips: {
-      watering: plant_details?.wiki_description?.value?.includes('drought') 
-        ? 'Water sparingly, allow soil to dry between waterings.' 
-        : 'Keep soil consistently moist but not waterlogged.',
-      sunlight: 'Prefers bright, indirect light. Can tolerate some direct sun.',
-      temperature: 'Thrives in temperatures between 65-80°F (18-27°C).',
-      humidity: 'Prefers moderate to high humidity.',
-      fertilizer: 'Feed monthly during growing season with a balanced fertilizer.'
+      watering: plant_details?.care_tips?.find(tip => 
+        tip.toLowerCase().includes('water') || 
+        tip.toLowerCase().includes('moist')
+      ) || 'Water when the top inch of soil is dry.',
+      
+      sunlight: plant_details?.care_tips?.find(tip => 
+        tip.toLowerCase().includes('light') || 
+        tip.toLowerCase().includes('sun')
+      ) || 'Prefers bright, indirect light.',
+      
+      temperature: plant_details?.care_tips?.find(tip => 
+        tip.toLowerCase().includes('temperature') || 
+        tip.toLowerCase().includes('warm')
+      ) || 'Prefers temperatures between 65-80°F (18-27°C).',
+      
+      // Use the careTips array if available
+      ...(careTips.length > 0 && {
+        customTips: careTips
+      })
     }
   };
 
@@ -85,21 +99,49 @@ export default function PlantDetailsScreen({ route, navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Care Instructions</Text>
           
-          <View style={styles.careItem}>
-            <Ionicons name="water" size={20} color="#2196F3" />
-            <View style={styles.careTextContainer}>
-              <Text style={styles.careTitle}>Watering</Text>
-              <Text style={styles.careDescription}>{plantInfo.careTips.watering}</Text>
+          {plantInfo.careTips.watering && (
+            <View style={styles.careItem}>
+              <Ionicons name="water" size={20} color="#2196F3" />
+              <View style={styles.careTextContainer}>
+                <Text style={styles.careTitle}>Watering</Text>
+                <Text style={styles.careDescription}>{plantInfo.careTips.watering}</Text>
+              </View>
             </View>
-          </View>
+          )}
           
-          <View style={styles.careItem}>
-            <Ionicons name="sunny" size={20} color="#FFC107" />
-            <View style={styles.careTextContainer}>
-              <Text style={styles.careTitle}>Sunlight</Text>
-              <Text style={styles.careDescription}>{plantInfo.careTips.sunlight}</Text>
+          {plantInfo.careTips.sunlight && (
+            <View style={styles.careItem}>
+              <Ionicons name="sunny" size={20} color="#FFC107" />
+              <View style={styles.careTextContainer}>
+                <Text style={styles.careTitle}>Sunlight</Text>
+                <Text style={styles.careDescription}>{plantInfo.careTips.sunlight}</Text>
+              </View>
             </View>
-          </View>
+          )}
+          
+          {plantInfo.careTips.temperature && (
+            <View style={styles.careItem}>
+              <Ionicons name="thermometer" size={20} color="#F44336" />
+              <View style={styles.careTextContainer}>
+                <Text style={styles.careTitle}>Temperature</Text>
+                <Text style={styles.careDescription}>{plantInfo.careTips.temperature}</Text>
+              </View>
+            </View>
+          )}
+          
+          {plantInfo.careTips.customTips && plantInfo.careTips.customTips.length > 0 && (
+            <View style={styles.careItem}>
+              <Ionicons name="list" size={20} color="#4CAF50" />
+              <View style={styles.careTextContainer}>
+                <Text style={styles.careTitle}>Care Tips</Text>
+                {plantInfo.careTips.customTips.map((tip, index) => (
+                  <Text key={index} style={[styles.careDescription, { marginTop: index > 0 ? 5 : 0 }]}>
+                    • {tip}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          )}
           
           <View style={styles.careItem}>
             <Ionicons name="thermometer" size={20} color="#F44336" />
@@ -148,60 +190,77 @@ export default function PlantDetailsScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f0f7f0',
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    padding: 16,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 2,
   },
   backButton: {
-    padding: 5,
+    padding: 8,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1B5E20',
+    flex: 1,
+    textAlign: 'center',
+    marginBottom: 20,
   },
   content: {
-    padding: 20,
+    flex: 1,
   },
   confidenceBadge: {
-    alignSelf: 'flex-start',
     backgroundColor: '#E8F5E9',
-    paddingVertical: 5,
     paddingHorizontal: 12,
-    borderRadius: 15,
-    marginBottom: 20,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
   },
   confidenceText: {
     color: '#2E7D32',
     fontWeight: '600',
+    fontSize: 14,
   },
   section: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    elevation: 1,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333',
+    fontWeight: '700',
+    marginBottom: 16,
+    color: '#1B5E20',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 10,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 8,
   },
   sectionContent: {
     fontSize: 16,
@@ -237,21 +296,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 20,
     alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   careTextContainer: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: 16,
   },
   careTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 3,
-    color: '#333',
+    fontWeight: '700',
+    marginBottom: 6,
+    color: '#2E7D32',
   },
   careDescription: {
     fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    color: '#444',
+    lineHeight: 22,
+    marginBottom: 4,
   },
   noteContainer: {
     flexDirection: 'row',

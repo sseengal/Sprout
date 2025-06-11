@@ -11,31 +11,36 @@ import {
   StatusBar,
   Alert,
   Linking,
-  Dimensions
+  Dimensions,
+  Modal,
+  Pressable
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const PlantDetailsScreen = () => {
-  const { plantData, imageUri } = useLocalSearchParams();
+const PlantDetailsScreen = ({ plantData, imageUri }) => {
   const router = useRouter();
   const [plant, setPlant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [careInfo, setCareInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
+  const [isConfidenceModalVisible, setIsConfidenceModalVisible] = useState(false);
 
   // Extract plant information
   useEffect(() => {
     const loadPlantData = async () => {
       try {
-        const parsedData = plantData ? JSON.parse(plantData) : null;
-        if (!parsedData) throw new Error('No plant data available');
+        console.log('Raw plantData from props:', plantData);
         
-        setPlant(parsedData);
-        extractCareInfo(parsedData);
+        if (!plantData) {
+          throw new Error('No plant data available');
+        }
+        
+        setPlant(plantData);
+        extractCareInfo(plantData);
       } catch (err) {
         console.error('Error loading plant data:', err);
         setError(err.message || 'Failed to load plant data');
@@ -91,8 +96,26 @@ const PlantDetailsScreen = () => {
 
   // Get plant name from the first suggestion or House Plant data
   const getPlantName = () => {
-    if (plant?.housePlantData?.name) return plant.housePlantData.name;
-    if (plant?.suggestions?.[0]?.plant_name) return plant.suggestions[0].plant_name;
+    // Try to get a common name from house plant data first
+    if (plant?.housePlantData?.commonNames?.[0]) {
+      return plant.housePlantData.commonNames[0];
+    }
+    
+    // Try to get a common name from PlantNet data
+    if (plant?.suggestions?.[0]?.plant_details?.common_names?.length > 0) {
+      return plant.suggestions[0].plant_details.common_names[0];
+    }
+    
+    // If no common name, use the scientific name but format it nicely
+    const scientificName = getScientificName();
+    if (scientificName) {
+      // Convert scientific name to title case for better readability
+      return scientificName
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    
     return 'Unknown Plant';
   };
 
@@ -164,20 +187,38 @@ const PlantDetailsScreen = () => {
 
         {/* Plant Name and Info */}
         <View style={styles.infoContainer}>
-          <Text style={styles.plantName}>{getPlantName()}</Text>
-          
-          {getScientificName() && (
-            <Text style={styles.scientificName}>
-              {getScientificName()}
+          <View style={styles.nameContainer}>
+            <Text style={styles.plantName}>
+              {getPlantName()}
             </Text>
-          )}
+            {(() => {
+              const scientificName = getScientificName();
+              if (scientificName) {
+                return (
+                  <Text style={styles.scientificName}>
+                    {scientificName}
+                  </Text>
+                );
+              }
+              return null;
+            })()}
+          </View>
           
           {getConfidence() && (
-            <View style={styles.confidenceContainer}>
-              <Text style={styles.confidenceText}>
-                Confidence: {getConfidence()}%
-              </Text>
-            </View>
+            <Pressable
+              onPress={() => setIsConfidenceModalVisible(true)}
+              style={({ pressed }) => [
+                styles.confidenceContainer,
+                { opacity: pressed ? 0.6 : 1 }
+              ]}
+            >
+              <View style={styles.confidenceContent}>
+                <Text style={styles.confidenceText}>
+                  Confidence: {getConfidence()}%
+                </Text>
+                <MaterialIcons name="info-outline" size={16} color="#2E7D32" style={styles.infoIcon} />
+              </View>
+            </Pressable>
           )}
         </View>
 
@@ -286,6 +327,37 @@ const PlantDetailsScreen = () => {
             </View>
           )}
         </View>
+
+        {/* Confidence Explanation Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={isConfidenceModalVisible}
+          onRequestClose={() => setIsConfidenceModalVisible(false)}
+        >
+          <View style={styles.confidenceModalContainer}>
+            <View style={styles.confidenceModalContent}>
+              <Text style={styles.confidenceModalTitle}>About Confidence Score</Text>
+              <Text style={styles.confidenceModalText}>
+                The confidence score indicates how certain our system is about the plant identification.
+                
+                {'\n\n'}A higher percentage means we're more confident in the match.
+                
+                {'\n\n'}To improve accuracy:
+                • Take a clear, well-lit photo
+                • Focus on leaves or flowers
+                • Avoid multiple plants in one photo
+                • Take photos from different angles
+              </Text>
+              <Pressable
+                onPress={() => setIsConfidenceModalVisible(false)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <Text style={styles.confidenceModalClose}>Got it</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -349,28 +421,72 @@ const styles = StyleSheet.create({
   infoContainer: {
     padding: 16,
   },
+  nameContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
   plantName: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: 'bold',
     color: '#2E7D32',
-    marginBottom: 4,
+    textAlign: 'center',
+    marginBottom: 2,
   },
   scientificName: {
     fontSize: 16,
     color: '#666',
     fontStyle: 'italic',
-    marginBottom: 8,
+    textAlign: 'center',
   },
   confidenceContainer: {
     backgroundColor: '#E8F5E9',
     padding: 8,
     borderRadius: 4,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
+    marginTop: 8,
+  },
+  confidenceModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  confidenceModalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+  },
+  confidenceModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#2E7D32',
+  },
+  confidenceModalText: {
+    fontSize: 16,
+    marginBottom: 15,
+    lineHeight: 22,
+  },
+  confidenceModalClose: {
+    color: '#2E7D32',
+    fontWeight: '600',
+    textAlign: 'right',
+    marginTop: 10,
+  },
+  confidenceContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   confidenceText: {
     color: '#2E7D32',
     fontSize: 14,
     fontWeight: '500',
+    marginRight: 4,
+  },
+  infoIcon: {
+    marginTop: 1, // Small adjustment for visual alignment
   },
   tabsContainer: {
     flexDirection: 'row',
