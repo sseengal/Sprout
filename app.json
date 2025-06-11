@@ -7,27 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "sprout",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#4CAF50"
-    },
-    "updates": {
-      "fallbackToCacheTimeout": 0
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourusername.sprout",
-      "buildNumber": "1.0.0",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Sprout needs access to your camera to identify plants.",
-        "NSPhotoLibraryUsageDescription": "Sprout needs access to your photo library to select plant images.",
-        "NSPhotoLibraryAddUsageDescription": "Sprout needs permission to save images to your photo library."
-      }
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -39,12 +18,55 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "sprout",
+              "host": "auth"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourusername.sprout",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Sprout needs access to your camera to identify plants.",
+        "NSPhotoLibraryUsageDescription": "Sprout needs access to your photo library to select plant images.",
+        "NSPhotoLibraryAddUsageDescription": "Sprout needs permission to save images to your photo library.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["sprout"],
+            "CFBundleURLName": "com.yourusername.sprout"
+          }
+        ],
+        "LSApplicationQueriesSchemes": ["sprout"]
+      }
+    },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4CAF50"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
       [
         "expo-image-picker",
         {

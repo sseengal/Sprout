@@ -1,13 +1,52 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user, signOut, loading } = useAuth();
+  
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // The auth state change will handle the navigation
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+  
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.welcomeText}>Welcome back,</Text>
+            <Text style={styles.userName}>
+              {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Plant Lover'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={handleSignOut} style={styles.profileButton}>
+            {user?.user_metadata?.avatar_url ? (
+              <Image 
+                source={{ uri: user.user_metadata.avatar_url }} 
+                style={styles.avatar} 
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <MaterialIcons name="person" size={24} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>Sprout</Text>
         <Text style={styles.subtitle}>Your Personal Plant Care Assistant</Text>
       </View>
@@ -40,13 +79,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 50,
+    paddingBottom: 25,
     paddingHorizontal: 20,
     backgroundColor: '#2E7D32',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  welcomeText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 16,
+  },
+  userName: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,

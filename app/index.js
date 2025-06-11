@@ -1,28 +1,38 @@
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { signInWithGoogle, loading } = useAuth();
 
   const handleSkip = () => {
-    // Navigate to the main app (home screen)
     router.replace('/(tabs)');
   };
 
-  const handleGoogleLogin = () => {
-    // Placeholder for Google login
-    console.log('Google login pressed');
-    // For now, just navigate to home
-    router.replace('/(tabs)');
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogle();
+      // The auth state change will handle the navigation
+    } catch (error) {
+      console.error('Error signing in with Google:', error);
+      // Handle error (show error message to user)
+    }
   };
 
+  // For now, we'll keep the Facebook button but it won't do anything
   const handleFacebookLogin = () => {
-    // Placeholder for Facebook login
-    console.log('Facebook login pressed');
-    // For now, just navigate to home
-    router.replace('/(tabs)');
+    console.log('Facebook login not implemented yet');
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -37,11 +47,18 @@ export default function LoginScreen() {
         {/* Login Form */}
         <View style={styles.formContainer}>
           <TouchableOpacity 
-            style={[styles.socialButton, styles.googleButton]}
+            style={[styles.socialButton, styles.googleButton, loading && styles.disabledButton]}
             onPress={handleGoogleLogin}
+            disabled={loading}
           >
-            <MaterialIcons name="language" size={20} color="#fff" style={styles.socialIcon} />
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" style={styles.socialIcon} />
+            ) : (
+              <MaterialIcons name="language" size={20} color="#fff" style={styles.socialIcon} />
+            )}
+            <Text style={styles.socialButtonText}>
+              {loading ? 'Signing in...' : 'Continue with Google'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -81,6 +98,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   content: {
     flex: 1,
