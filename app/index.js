@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signInWithGoogle, loading } = useAuth();
+  const { handleGoogleSignIn, loading } = useAuth();
 
   const handleSkip = () => {
     router.replace('/(tabs)');
@@ -13,7 +13,7 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     try {
-      await signInWithGoogle();
+      await handleGoogleSignIn();
       // The auth state change will handle the navigation
     } catch (error) {
       console.error('Error signing in with Google:', error);

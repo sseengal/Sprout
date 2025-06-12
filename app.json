@@ -1,86 +1,28 @@
 {
   "expo": {
     "name": "Sprout",
+    "owner": "sseengal",
     "slug": "sprout-plant-care",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "scheme": "sprout",
-    "userInterfaceStyle": "automatic",
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4CAF50"
-      },
-      "package": "com.yourusername.sprout",
-      "versionCode": 1,
-      "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ],
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "sprout",
-              "host": "auth"
-            }
-          ],
-          "category": ["BROWSABLE", "DEFAULT"]
-        }
-      ]
-    },
+    "plugins": [
+      "expo-web-browser"
+    ],
     "ios": {
-      "supportsTablet": true,
       "bundleIdentifier": "com.yourusername.sprout",
-      "buildNumber": "1.0.0",
       "infoPlist": {
-        "NSCameraUsageDescription": "Sprout needs access to your camera to identify plants.",
-        "NSPhotoLibraryUsageDescription": "Sprout needs access to your photo library to select plant images.",
-        "NSPhotoLibraryAddUsageDescription": "Sprout needs permission to save images to your photo library.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["sprout"],
-            "CFBundleURLName": "com.yourusername.sprout"
+            "CFBundleURLSchemes": ["sprout"]
           }
-        ],
-        "LSApplicationQueriesSchemes": ["sprout"]
+        ]
       }
     },
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#4CAF50"
-    },
-    "updates": {
-      "fallbackToCacheTimeout": 0
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-secure-store",
-      "expo-web-browser",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "The app accesses your photos to let you select plant images.",
-          "cameraPermission": "The app accesses your camera to take photos of plants."
-        }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    },
-    "description": "Identify plants and get care instructions with Sprout.",
-    "githubUrl": "https://github.com/yourusername/sprout-plant-app"
-  }
+    "android": {
+      "package": "com.yourusername.sprout"
+    }
+  },
+  "description": "Identify plants and get care instructions with Sprout.",
+  "githubUrl": "https://github.com/yourusername/sprout-plant-app"
 }

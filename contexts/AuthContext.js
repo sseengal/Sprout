@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, signInWithGoogle } from '../lib/supabase';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
+import { supabase } from '../lib/supabase';
 
 // Create the auth context
 export const AuthContext = createContext({});
@@ -32,128 +31,80 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      // First, warm up the browser to make the auth flow faster
-      if (WebBrowser.warmUpAsync) {
-        await WebBrowser.warmUpAsync();
-      }
-
-      console.log('Initiating Google OAuth flow...');
+      // Get the redirect URL based on the environment
+      let redirectUrl = '';
       
-      // Generate the redirect URL for the current platform
-      const redirectUrl = Linking.createURL('auth/callback');
+      if (Platform.OS === 'web') {
+        // For web, use the current origin + /auth/callback
+        redirectUrl = `${window.location.origin}/auth/callback`;
+      } else if (__DEV__) {
+        // For development, use the Expo AuthSession proxy URL with correct owner and slug
+        const Constants = require('expo-constants').default;
+        const expoOwner = (Constants?.manifest?.owner) || (Constants?.expoConfig?.owner) || 'sseengal';
+        const expoSlug = (Constants?.manifest?.slug) || (Constants?.expoConfig?.slug) || 'sprout-plant-care';
+        redirectUrl = `https://auth.expo.io/@${expoOwner}/${expoSlug}`;
+      } else {
+        // For production, use the custom scheme
+        redirectUrl = 'sprout://auth/callback';
+      }
+      
+      console.log('Initiating Google OAuth flow...');
       console.log('Using redirect URL:', redirectUrl);
       
-      // Start the OAuth flow using the helper function from supabase.js
-      const response = await signInWithGoogle(redirectUrl);
-      console.log('Sign in response:', response);
-
-      if (!response || !response.url) {
-        const errorMsg = 'No authentication URL received from the server';
-        console.error(errorMsg);
-        setError(errorMsg);
-        setLoading(false);
-        return;
+      // Start the OAuth flow
+      const { data, error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true, // We'll handle the browser redirect manually
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      
+      if (authError) {
+        console.error('Error getting OAuth URL:', authError);
+        throw authError;
       }
-
-      const { url } = response;
-      console.log('OAuth URL:', url);
-
-      // If we're on web, we need to handle the redirect manually
-      if (Platform.OS === 'web') {
-        console.log('Redirecting to:', url);
-        window.location.href = url;
-        return;
+      
+      if (!data?.url) {
+        throw new Error('No authentication URL received from the server');
       }
-
-      // For native, open the URL in the browser
-      if (url) {
-        try {
-          // Open the auth session
-          console.log('Opening WebBrowser with URL:', url);
-          const result = await WebBrowser.openAuthSessionAsync(
-            url,
-            redirectUrl,
-            { 
-              showInRecents: true,
-              // This is important for iOS to handle the redirect back to the app
-              dismissButtonStyle: 'cancel',
-              presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN
-            }
-          );
-
-          console.log('WebBrowser result:', result);
-
-          // Dismiss the auth browser
-          if (WebBrowser.dismiss) {
-            await WebBrowser.dismiss();
-          }
-
-          if (result.type === 'success') {
-            console.log('Auth successful, processing response...');
-            
-            // The URL will contain the access token and refresh token
-            const responseUrl = result.url;
-            console.log('Auth response URL:', responseUrl);
-            
-            // Parse the URL to extract the tokens
-            const urlObj = new URL(responseUrl);
-            const hash = urlObj.hash.substring(1); // Remove the '#'
-            const params = new URLSearchParams(hash);
-            const accessToken = params.get('access_token');
-            const refreshToken = params.get('refresh_token');
-            
-            console.log('Extracted tokens - Access Token:', !!accessToken, 'Refresh Token:', !!refreshToken);
-            
-            if (accessToken && refreshToken) {
-              try {
-                // Set the session manually
-                const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-                  access_token: accessToken,
-                  refresh_token: refreshToken,
-                });
-                
-                if (sessionError) {
-                  console.error('Session error:', sessionError);
-                  setError(sessionError.message);
-                  return;
-                }
-                
-                console.log('Session data:', sessionData);
-                
-                // Update the user state
-                setUser(sessionData?.user || null);
-                setSession(sessionData);
-                
-                // Navigate to the home screen
-                if (router) {
-                  router.replace('/(tabs)');
-                }
-              } catch (sessionError) {
-                console.error('Error setting session:', sessionError);
-                setError(sessionError.message);
-              }
-            } else {
-              const errorMsg = 'Failed to extract tokens from the authentication response';
-              console.error(errorMsg);
-              setError(errorMsg);
-            }
-          } else if (result.type === 'cancel') {
-            console.log('User cancelled the authentication');
-            setError('Authentication was cancelled');
-          } else {
-            const errorMsg = `Authentication failed with type: ${result.type}`;
-            console.error(errorMsg);
-            setError(errorMsg);
-          }
-        } catch (browserError) {
-          console.error('Error during browser authentication:', browserError);
-          setError(browserError.message);
+      
+      console.log('Opening browser for authentication...');
+      
+      // Open the browser for authentication
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectUrl,
+        {
+          showInRecents: true,
+          createTask: false, // This prevents the app from being closed on Android
         }
+      );
+      
+      console.log('Auth session result:', result);
+      
+      // Handle the result of the authentication
+      if (result.type === 'success') {
+        // The URL will be handled by the deep linking setup in _layout.js
+        console.log('Authentication successful, handling callback...');
+        
+        // If we have a URL, try to handle it with the auth callback
+        if (result.url) {
+          console.log('Handling auth callback with URL:', result.url);
+          await handleAuthCallback(result.url);
+        }
+      } else if (result.type === 'cancel') {
+        console.log('User cancelled the authentication');
+        setError('Authentication was cancelled');
       } else {
-        const errorMsg = 'No authentication URL received';
-        console.error(errorMsg);
-        setError(errorMsg);
+        console.log('Authentication failed with type:', result.type);
+        setError('Authentication failed');
       }
+
     } catch (error) {
       console.error('Error signing in with Google:', error);
       setError(error.message);
@@ -169,16 +120,177 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Sign out
-  const signOut = async () => {
+  const handleSignOut = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setUser(null);
       setSession(null);
+      // Navigate to the login screen after sign out
+      router.replace('/');
     } catch (error) {
       console.error('Error signing out:', error);
-      throw error;
+      setError(error.message || 'An error occurred while signing out');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle OAuth callback
+  const handleAuthCallback = async (url) => {
+    if (!url) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Handling auth callback with URL:', url);
+      
+      // Check if this is an OAuth callback URL from the redirect
+      if (url.includes('access_token') || url.includes('error=') || url.includes('type=signin')) {
+        // This is an OAuth callback URL, extract tokens from URL
+        console.log('Processing OAuth callback URL...');
+        
+        // For Expo AuthSession, we need to handle the URL with the expo-auth-session params
+        if (url.includes('expo-auth-session')) {
+          // This is coming from Expo AuthSession, we need to parse it differently
+          const params = new URLSearchParams(new URL(url).search);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const error = params.get('error');
+          
+          if (error) {
+            throw new Error(`OAuth error: ${error}. ${params.get('error_description') || ''}`);
+          }
+          
+          if (!accessToken || !refreshToken) {
+            // Try to get the session directly
+            console.log('No tokens in URL, trying to get session...');
+            const { data: { session: newSession }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !newSession) {
+              throw new Error('No valid session found after OAuth flow');
+            }
+            
+            // Get the user data
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            
+            if (!currentUser) {
+              throw new Error('No user data available after authentication');
+            }
+            
+            setUser(currentUser);
+            setSession(newSession);
+            router.replace('/(tabs)');
+            return;
+          }
+          
+          // If we have tokens, set the session
+          console.log('Setting session with tokens from URL...');
+          const { data: { session: newSession }, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+            throw sessionError;
+          }
+          
+          console.log('Session set successfully from URL');
+          
+          // Get the user data
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          
+          if (!currentUser) {
+            throw new Error('No user data available after authentication');
+          }
+          
+          setUser(currentUser);
+          setSession(newSession);
+          router.replace('/(tabs)');
+        } else {
+          // Handle standard OAuth callback
+          const params = new URLSearchParams(url.split('#')[1] || url.split('?')[1]);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const error = params.get('error');
+          
+          if (error) {
+            throw new Error(`OAuth error: ${error}. ${params.get('error_description') || ''}`);
+          }
+          
+          if (!accessToken || !refreshToken) {
+            throw new Error('No access token or refresh token found in the URL');
+          }
+          
+          console.log('Setting session with tokens from URL...');
+          
+          // Set the session with the tokens from the URL
+          const { data: { session: newSession }, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+            throw sessionError;
+          }
+          
+          console.log('Session set successfully from URL');
+          
+          // Get the user data
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          
+          if (!currentUser) {
+            throw new Error('No user data available after authentication');
+          }
+          
+          setUser(currentUser);
+          setSession(newSession);
+          router.replace('/(tabs)');
+        }
+      } else if (url.includes('auth/callback')) {
+        // This is a callback URL that might be from a custom scheme
+        console.log('Handling custom scheme callback...');
+        
+        // Try to get the session from the URL
+        const { data: { session: newSession }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Error getting session from URL:', sessionError);
+          throw sessionError;
+        }
+        
+        if (newSession) {
+          // We have a valid session
+          console.log('Got valid session from URL callback');
+          setSession(newSession);
+          
+          // Get the user data
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          
+          if (currentUser) {
+            setUser(currentUser);
+            // Navigate to home after successful login
+            router.replace('/(tabs)');
+          } else {
+            throw new Error('No user data available after authentication');
+          }
+        } else {
+          throw new Error('No session found in the callback URL');
+        }
+      } else {
+        console.log('Not an OAuth callback URL, ignoring...');
+      }
+      
+    } catch (error) {
+      console.error('Error in handleAuthCallback:', error);
+      setError(error.message || 'An error occurred during authentication');
+      // Navigate to login on error
+      router.replace('/');
     } finally {
       setLoading(false);
     }
@@ -190,25 +302,10 @@ export const AuthProvider = ({ children }) => {
     session,
     loading,
     error,
-    signInWithGoogle: handleGoogleSignIn,
-    signOut: async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const { error: signOutError } = await supabase.auth.signOut();
-        if (signOutError) throw signOutError;
-        setUser(null);
-        setSession(null);
-        if (router) {
-          router.replace('/');
-        }
-      } catch (error) {
-        console.error('Error signing out:', error);
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    },
+    handleGoogleSignIn,
+    signIn: handleGoogleSignIn, // Keep for backward compatibility
+    signOut: handleSignOut,
+    handleAuthCallback,
     clearError: () => setError(null),
   };
 

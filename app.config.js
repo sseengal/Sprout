@@ -1,19 +1,28 @@
 export default {
   expo: {
     name: 'Sprout',
+    owner: 'sseengal',
     slug: 'sprout-plant-care',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
     scheme: 'sprout',
     userInterfaceStyle: 'automatic',
+    plugins: [
+      "expo-web-browser"
+    ],
+    
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
       backgroundColor: '#4CAF50'
     },
     updates: {
+      url: "https://u.expo.dev/ca30723e-9d91-4e05-bdad-b5e495bfd396",
       fallbackToCacheTimeout: 0
+    },
+    runtimeVersion: {
+      policy: "appVersion"
     },
     assetBundlePatterns: [
       '**/*'
@@ -25,7 +34,14 @@ export default {
       infoPlist: {
         NSCameraUsageDescription: 'Sprout needs access to your camera to identify plants.',
         NSPhotoLibraryUsageDescription: 'Sprout needs access to your photo library to select plant images.',
-        NSPhotoLibraryAddUsageDescription: 'Sprout needs permission to save images to your photo library.'
+        NSPhotoLibraryAddUsageDescription: 'Sprout needs permission to save images to your photo library.',
+        CFBundleURLTypes: [
+          {
+            CFBundleURLSchemes: ['sprout'],
+            CFBundleURLName: 'com.yourusername.sprout'
+          }
+        ],
+        LSApplicationQueriesSchemes: ['sprout']
       }
     },
     android: {
@@ -60,6 +76,9 @@ export default {
         ENABLE_LOGGING: process.env.ENABLE_LOGGING === 'true',
         LOG_LEVEL: process.env.LOG_LEVEL || 'debug',
         APP_ENV: process.env.APP_ENV || 'development'
+      },
+      eas: {
+        projectId: "ca30723e-9d91-4e05-bdad-b5e495bfd396"
       }
     },
     description: 'Identify plants and get care instructions with Sprout.',
