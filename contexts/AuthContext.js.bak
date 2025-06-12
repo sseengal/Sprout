@@ -1,79 +1,39 @@
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
-
-// Helper function to log with timestamp and component name
-const createLogger = (component) => {
-  return (...args) => {
-    const timestamp = new Date().toISOString();
-    const message = `[${timestamp}] [${component}]`;
-    console.log(message, ...args);
-  };
-};
 
 // Create the auth context
 export const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
-  const logger = useMemo(() => createLogger('AuthProvider'), []);
-
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Log component mount/unmount
   useEffect(() => {
-    logger('AuthProvider mounted');
-    return () => logger('AuthProvider unmounted');
-  }, [logger]);
-
-  useEffect(() => {
-    logger('Setting up auth state listener');
-    
     // Check active sessions and sets the user
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const sessionId = session?.user?.id || 'no-session';
-      logger(`Auth state changed - Event: ${event}, Session ID: ${sessionId}`);
-      
-      // Log the previous and new user IDs to track changes
-      // Note: user may be stale here, but we only need to log
-      // const prevUserId = user?.id || 'none';
-      // const newUserId = session?.user?.id || 'none';
-      // if (prevUserId !== newUserId) {
-      //   logger(`User changed from ${prevUserId} to ${newUserId}`);
-      // }
-      
       setSession(session);
       setUser(session?.user ?? null);
-      
-      // Always set loading to false after we've processed the auth state
-      logger('Auth state processed, setting loading to false');
       setLoading(false);
     });
 
     // Cleanup subscription on unmount
-    return () => {
-      logger('Cleaning up auth state listener');
-      if (subscription?.unsubscribe) {
-        subscription.unsubscribe();
-      } else {
-        logger('No subscription to unsubscribe from');
-      }
-    };
-  }, [logger]);
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Sign up with email and password
   const signUpWithEmail = async (email, password) => {
-    logger('Attempting to sign up with:', { email });
+    console.log('Attempting to sign up with:', { email });
     try {
       setLoading(true);
       setError(null);
-
+      
       // Sign up the user
-      logger('Calling supabase.auth.signUp...');
+      console.log('Calling supabase.auth.signUp...');
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -81,15 +41,15 @@ export const AuthProvider = ({ children }) => {
           emailRedirectTo: 'exp://192.168.1.36:8081/--/email-confirmation',
         },
       });
-
-      logger('Sign up response:', { data, signUpError });
-
+      
+      console.log('Sign up response:', { data, signUpError });
+      
       if (signUpError) {
-        logger('Sign up error:', signUpError);
+        console.error('Sign up error:', signUpError);
         throw signUpError;
       }
-
-      logger('Sign up successful, user data:', data);
+      
+      console.log('Sign up successful, user data:', data);
       return { 
         data: { 
           email: email // Only return the email for the confirmation screen
@@ -97,7 +57,7 @@ export const AuthProvider = ({ children }) => {
         error: null 
       };
     } catch (error) {
-      logger('Error in signUpWithEmail:', {
+      console.error('Error in signUpWithEmail:', {
         message: error.message,
         code: error.code,
         status: error.status,
@@ -107,35 +67,35 @@ export const AuthProvider = ({ children }) => {
       setError(errorMessage);
       return { data: null, error: new Error(errorMessage) };
     } finally {
-      logger('Sign up process completed');
+      console.log('Sign up process completed');
       setLoading(false);
     }
   };
 
   // Sign in with email and password
   const signInWithEmail = async (email, password) => {
-    logger('Attempting to sign in with:', { email });
+    console.log('Attempting to sign in with:', { email });
     try {
       setLoading(true);
       setError(null);
-
-      logger('Calling supabase.auth.signInWithPassword...');
+      
+      console.log('Calling supabase.auth.signInWithPassword...');
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      logger('Sign in response:', { data, signInError });
-
+      
+      console.log('Sign in response:', { data, signInError });
+      
       if (signInError) {
-        logger('Sign in error:', signInError);
+        console.error('Sign in error:', signInError);
         throw signInError;
       }
-
-      logger('Sign in successful, user data:', data);
+      
+      console.log('Sign in successful, user data:', data);
       return { data, error: null };
     } catch (error) {
-      logger('Error in signInWithEmail:', {
+      console.error('Error in signInWithEmail:', {
         message: error.message,
         code: error.code,
         status: error.status,
@@ -145,68 +105,26 @@ export const AuthProvider = ({ children }) => {
       setError(errorMessage);
       return { data: null, error: new Error(errorMessage) };
     } finally {
-      logger('Sign in process completed');
+      console.log('Sign in process completed');
       setLoading(false);
     }
   };
 
-  // Sign out with retry logic
-  const signOut = async (retryCount = 0) => {
-    const MAX_RETRIES = 2;
-    const retryDelay = 1000; // 1 second
-
-    logger(`Starting sign out (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+  // Sign out
+  const signOut = async () => {
     try {
       setLoading(true);
-
-      // Clear local state first to prevent UI flicker
-      const wasLoggedIn = !!user;
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       setUser(null);
       setSession(null);
-
-      if (!wasLoggedIn) {
-        logger('No user was logged in, skipping server sign out');
-        return { error: null };
-      }
-
-      // Attempt to sign out from the server
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        logger(`Sign out error (attempt ${retryCount + 1}):`, error);
-
-        if (retryCount < MAX_RETRIES) {
-          logger(`Retrying sign out in ${retryDelay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          return signOut(retryCount + 1);
-        }
-        throw error;
-      }
-      
-      logger('Successfully signed out from server');
       return { error: null };
-      
     } catch (error) {
-      const errorMessage = error.message || 'Failed to sign out';
-      logger('Sign out failed:', errorMessage, error);
-      setError(errorMessage);
+      console.error('Error signing out:', error);
+      setError(error.message || 'Failed to sign out');
       return { error };
-      
     } finally {
       setLoading(false);
-      
-      // Ensure we navigate to login after a short delay
-      // This acts as a fallback in case the auth state change listener doesn't trigger
-      setTimeout(() => {
-        if (!user) {
-          logger('Ensuring navigation to login page after sign out');
-          try {
-            router.replace('/');
-          } catch (navError) {
-            logger('Error during navigation after sign out:', navError);
-          }
-        }
-      }, 100);
     }
   };
 
@@ -408,15 +326,38 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Sign out
+  const handleSignOut = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // First, clear the user and session state
+      setUser(null);
+      setSession(null);
+      
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // Ensure we're not already on the auth screen before navigating
+      if (!window.location.pathname.startsWith('/')) {
+        router.replace('/');
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setError(error.message || 'An error occurred while signing out');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle OAuth callback
   const handleAuthCallback = useCallback(async (url) => {
     if (!url) {
       console.log('No URL provided to handleAuthCallback');
       return;
     }
-    
-    // Get router inside the function to avoid dependency on it
-    const currentRouter = router;
     
     try {
       setLoading(true);
@@ -459,8 +400,7 @@ export const AuthProvider = ({ children }) => {
             
             setUser(currentUser);
             setSession(newSession);
-            // Use the router from the function scope
-            currentRouter.replace('/(tabs)');
+            router.replace('/(tabs)');
             return;
           }
           
@@ -487,7 +427,7 @@ export const AuthProvider = ({ children }) => {
           
           setUser(currentUser);
           setSession(newSession);
-          currentRouter.replace('/(tabs)');
+          router.replace('/(tabs)');
         } else {
           // Handle standard OAuth callback
           const params = new URLSearchParams(url.split('#')[1] || url.split('?')[1]);
@@ -527,7 +467,7 @@ export const AuthProvider = ({ children }) => {
           
           setUser(currentUser);
           setSession(newSession);
-          currentRouter.replace('/(tabs)');
+          router.replace('/(tabs)');
         }
       } else if (url.includes('auth/callback')) {
         // This is a callback URL that might be from a custom scheme
@@ -552,7 +492,7 @@ export const AuthProvider = ({ children }) => {
           if (currentUser) {
             setUser(currentUser);
             // Navigate to home after successful login
-            currentRouter.replace('/(tabs)');
+            router.replace('/(tabs)');
           } else {
             throw new Error('No user data available after authentication');
           }
@@ -567,10 +507,16 @@ export const AuthProvider = ({ children }) => {
       console.error('Error in handleAuthCallback:', error);
       setError(error.message || 'An error occurred during authentication');
       // Navigate to login on error
-      currentRouter.replace('/');
+      router.replace('/');
     } finally {
       setLoading(false);
     }
+  };
+
+  }, [setLoading, setError, setUser, setSession, router]);
+
+  }, [setLoading, setError, setUser, setSession, router, supabase.auth]);
+
   }, [setLoading, setError, setUser, setSession, router]);
 
   // Test function to simulate a deep link
@@ -590,7 +536,7 @@ export const AuthProvider = ({ children }) => {
     signUpWithEmail,
     signInWithEmail,
     signInWithGoogle: handleGoogleSignIn,
-    signOut,
+    signOut: handleSignOut,
     resendVerificationEmail,
     checkEmailVerification,
     handleAuthCallback,
@@ -613,5 +559,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export default AuthProvider;

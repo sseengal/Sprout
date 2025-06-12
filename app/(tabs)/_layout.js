@@ -7,14 +7,6 @@ import { router } from 'expo-router';
 
 function ProtectedTabs() {
   const { user, loading } = useAuth();
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/');
-    }
-  }, [user, loading]);
-
   if (loading || !user) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -48,9 +40,18 @@ function ProtectedTabs() {
       <Tabs.Screen
         name="camera"
         options={{
-          title: 'Identify',
+          title: 'Camera',
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="camera-alt" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="person" size={24} color={color} />
           ),
         }}
       />

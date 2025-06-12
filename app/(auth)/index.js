@@ -6,27 +6,33 @@ import { useState } from 'react';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, loading, error: authError } = useAuth();
+  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, testDeepLink, loading, error: authError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
     try {
+      setIsSubmitting(true);
+      setFormError('');
       await handleGoogleSignIn();
       // The auth state change will handle the navigation
     } catch (error) {
       console.error('Error signing in with Google:', error);
       setFormError(error.message || 'Failed to sign in with Google');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleEmailSubmit = async () => {
     console.log('handleEmailSubmit called, isSignUp:', isSignUp);
     try {
+      setIsSubmitting(true);
       setFormError('');
       
       // Basic validation
@@ -92,6 +98,8 @@ export default function LoginScreen() {
       });
       const errorMessage = error.message || `Failed to ${isSignUp ? 'sign up' : 'sign in'}`;
       setFormError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -176,15 +184,24 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+              <TouchableOpacity 
+                style={[
+                  styles.button, 
+                  isSignUp && styles.buttonSecondary,
+                  isSubmitting && styles.buttonSubmitting
+                ]}
                 onPress={handleEmailSubmit}
-                disabled={loading}
+                disabled={isSubmitting}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
+                {isSubmitting ? (
+                  <View style={styles.buttonContent}>
+                    <ActivityIndicator color={isSignUp ? '#000' : '#fff'} style={styles.loadingIndicator} />
+                    <Text style={isSignUp ? styles.buttonSecondaryText : styles.buttonText}>
+                      {isSignUp ? 'Signing Up...' : 'Signing In...'}
+                    </Text>
+                  </View>
                 ) : (
-                  <Text style={styles.buttonText}>
+                  <Text style={isSignUp ? styles.buttonSecondaryText : styles.buttonText}>
                     {isSignUp ? 'Sign Up' : 'Sign In'}
                   </Text>
                 )}
@@ -197,18 +214,30 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.socialButton, styles.googleButton]}
+                style={[
+                  styles.socialButton, 
+                  styles.googleButton,
+                  (loading || isSubmitting) && styles.buttonDisabled
+                ]}
                 onPress={handleGoogleLogin}
-                disabled={loading}
+                disabled={loading || isSubmitting}
               >
-                <MaterialIcons name="google" size={20} color="#DB4437" />
-                <Text style={[styles.socialButtonText, { color: '#DB4437' }]}>
-                  Continue with Google
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="google" size={20} color="#fff" />
+                    <Text style={styles.socialButtonText}>Continue with Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.socialButton, styles.facebookButton]}
+                style={[
+                  styles.socialButton, 
+                  styles.facebookButton,
+                  loading && styles.buttonDisabled
+                ]}
                 onPress={handleFacebookLogin}
                 disabled={true}
               >
@@ -228,6 +257,16 @@ export default function LoginScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              
+              {/* Test Deep Link Button - Remove in production */}
+              <TouchableOpacity 
+                style={[styles.button, { marginTop: 20, backgroundColor: '#666' }]}
+                onPress={testDeepLink}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.buttonText}>Test Deep Link</Text>
+              </TouchableOpacity>
+              
             </View>
           </View>
         </ScrollView>
@@ -306,13 +345,30 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 24,
   },
-  buttonDisabled: {
-    opacity: 0.7,
+  // Keep the same style as primary button for sign up
+  buttonSecondary: {
+    backgroundColor: '#2E7D32',
+  },
+  buttonSubmitting: {
+    opacity: 0.8,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingIndicator: {
+    marginRight: 8,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
     fontWeight: '600',
+    fontSize: 16,
+  },
+  buttonSecondaryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
   },
   dividerContainer: {
     flexDirection: 'row',

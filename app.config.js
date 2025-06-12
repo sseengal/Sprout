@@ -9,7 +9,8 @@ export default {
     scheme: 'sprout',
     userInterfaceStyle: 'automatic',
     plugins: [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-router"
     ],
     
     splash: {

@@ -5,15 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, signOut, loading } = useAuth();
+  const { user, loading } = useAuth();
   
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      // The auth state change will handle the navigation
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+  const handleProfilePress = () => {
+    router.push('/(tabs)/profile');
   };
   
   if (loading) {
@@ -34,7 +29,7 @@ export default function HomeScreen() {
               {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Plant Lover'}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleSignOut} style={styles.profileButton}>
+          <TouchableOpacity onPress={handleProfilePress} style={styles.profileButton}>
             {user?.user_metadata?.avatar_url ? (
               <Image 
                 source={{ uri: user.user_metadata.avatar_url }} 
