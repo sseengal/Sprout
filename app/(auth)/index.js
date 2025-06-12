@@ -16,15 +16,25 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
+    console.log('Google Sign-In button pressed');
     try {
+      console.log('Starting Google Sign-In flow...');
       setIsSubmitting(true);
       setFormError('');
-      await handleGoogleSignIn();
+      
+      console.log('Calling handleGoogleSignIn...');
+      const result = await handleGoogleSignIn();
+      console.log('handleGoogleSignIn completed with result:', result);
       // The auth state change will handle the navigation
     } catch (error) {
-      console.error('Error signing in with Google:', error);
+      console.error('Error in handleGoogleLogin:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       setFormError(error.message || 'Failed to sign in with Google');
     } finally {
+      console.log('Google Sign-In flow completed, setting isSubmitting to false');
       setIsSubmitting(false);
     }
   };
