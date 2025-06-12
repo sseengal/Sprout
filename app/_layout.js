@@ -1,13 +1,25 @@
-import { useEffect } from 'react';
-import { Stack, useRouter, usePathname } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Stack, useRouter, usePathname, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import * as Linking from 'expo-linking';
+import { ActivityIndicator, View } from 'react-native';
 
-// This component handles the deep linking for auth callbacks
+// This component handles the deep linking for auth callbacks and auth state
 function AuthLayout() {
-  const { handleAuthCallback } = useAuth();
+  const { user, loading, handleAuthCallback } = useAuth();
   const router = useRouter();
+  const segments = useSegments();
   const pathname = usePathname();
+  const [initialized, setInitialized] = useState(false);
+  
+  // Check if the current route is in the auth group
+  const isInAuthGroup = segments[0] === '(auth)';
+  
+  // Check if the current route is the email confirmation screen
+  const isEmailConfirmationScreen = pathname === '/email-confirmation';
+  
+  // Check if the current route is the root screen (login/signup)
+  const isRootScreen = pathname === '/';
 
   useEffect(() => {
     // Handle deep links when the app is launched from a URL
@@ -38,10 +50,44 @@ function AuthLayout() {
     };
   }, [handleAuthCallback]);
 
+  // Handle navigation based on auth state
+  useEffect(() => {
+    if (!initialized) {
+      setInitialized(true);
+      return;
+    }
+    
+    // If we're still loading, don't do anything
+    if (loading) return;
+    
+    // If user is signed in and is in the auth group, redirect to home
+    if (user && isInAuthGroup) {
+      router.replace('/(tabs)');
+    } 
+    // If user is not signed in and is not in the auth group, redirect to login
+    else if (!user && !isInAuthGroup && !isEmailConfirmationScreen) {
+      router.replace('/');
+    }
+  }, [user, loading, isInAuthGroup, isEmailConfirmationScreen, initialized]);
+  
+  // Show loading indicator while initializing
+  if (loading && !initialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
+  }
+  
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+    <Stack screenOptions={{
+      headerShown: false,
+      animation: 'fade',
+    }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="email-confirmation" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="auth/callback" />
     </Stack>
   );
 }

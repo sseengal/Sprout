@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { Platform, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 // Create the auth context
@@ -24,6 +24,216 @@ export const AuthProvider = ({ children }) => {
     // Cleanup subscription on unmount
     return () => subscription.unsubscribe();
   }, []);
+
+  // Sign up with email and password
+  const signUpWithEmail = async (email, password) => {
+    console.log('Attempting to sign up with:', { email });
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Sign up the user
+      console.log('Calling supabase.auth.signUp...');
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: 'exp://192.168.1.36:8081/--/email-confirmation',
+        },
+      });
+      
+      console.log('Sign up response:', { data, signUpError });
+      
+      if (signUpError) {
+        console.error('Sign up error:', signUpError);
+        throw signUpError;
+      }
+      
+      // Don't sign in automatically, just return the sign up data
+      console.log('Sign up successful, user data:', data);
+      return { 
+        data: { 
+          user: data.user,
+          session: data.session,
+          email: email // Explicitly pass email for confirmation screen
+        }, 
+        error: null 
+      };
+    } catch (error) {
+      console.error('Error in signUpWithEmail:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        originalError: error
+      });
+      const errorMessage = error.message || 'Failed to sign up';
+      setError(errorMessage);
+      return { data: null, error: new Error(errorMessage) };
+    } finally {
+      console.log('Sign up process completed');
+      setLoading(false);
+    }
+  };
+
+  // Sign in with email and password
+  const signInWithEmail = async (email, password) => {
+    console.log('Attempting to sign in with:', { email });
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Calling supabase.auth.signInWithPassword...');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      console.log('Sign in response:', { data, signInError });
+      
+      if (signInError) {
+        console.error('Sign in error:', signInError);
+        throw signInError;
+      }
+      
+      console.log('Sign in successful, user data:', data);
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error in signInWithEmail:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        originalError: error
+      });
+      const errorMessage = error.message || 'Failed to sign in';
+      setError(errorMessage);
+      return { data: null, error: new Error(errorMessage) };
+    } finally {
+      console.log('Sign in process completed');
+      setLoading(false);
+    }
+  };
+
+  // Sign out
+  const signOut = async () => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setUser(null);
+      setSession(null);
+      return { error: null };
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setError(error.message || 'Failed to sign out');
+      return { error };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check if user's email is verified
+  const checkEmailVerification = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      // Get the current session first
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.log('Session error:', sessionError);
+        throw sessionError;
+      }
+      
+      // If no session, return not verified
+      if (!currentSession) {
+        console.log('No active session found');
+        return { verified: false, error: 'No active session' };
+      }
+      
+      // Get the current user
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.log('Error getting user:', userError);
+        throw userError;
+      }
+      
+      if (!currentUser) {
+        console.log('No user found in session');
+        return { verified: false, error: 'No user found' };
+      }
+      
+      console.log('Checking verification for user:', currentUser.email);
+      
+      // Check if email is confirmed in the users table
+      const { data: userData, error: userDataError } = await supabase
+        .from('users')
+        .select('email_confirmed_at')
+        .eq('id', currentUser.id)
+        .single();
+      
+      if (userDataError) {
+        console.log('Error fetching user data:', userDataError);
+        // If the users table doesn't exist or has an error, check the auth.users table
+        const isVerified = currentUser.email_confirmed_at || currentUser.email_confirmed_at !== null;
+        if (isVerified) {
+          setUser(currentUser);
+          setSession(currentSession);
+        }
+        return { verified: isVerified, error: null };
+      }
+      
+      const isVerified = !!userData?.email_confirmed_at;
+      console.log('Verification status:', { isVerified, userData });
+      
+      if (isVerified) {
+        // Update local state if verified
+        setUser(currentUser);
+        setSession(currentSession);
+      }
+      
+      return { verified: isVerified, error: null };
+    } catch (error) {
+      console.error('Error in checkEmailVerification:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        originalError: error
+      });
+      return { verified: false, error };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Resend verification email
+  const resendVerificationEmail = async (email) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      });
+      
+      if (error) throw error;
+      
+      Alert.alert(
+        'Email Sent',
+        'A new verification email has been sent to your email address.'
+      );
+      
+      return { error: null };
+    } catch (error) {
+      console.error('Error resending verification email:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to resend verification email. Please try again.'
+      );
+      return { error };
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Sign in with Google
   const handleGoogleSignIn = async () => {
@@ -302,10 +512,13 @@ export const AuthProvider = ({ children }) => {
     session,
     loading,
     error,
-    handleGoogleSignIn,
-    signIn: handleGoogleSignIn, // Keep for backward compatibility
+    signUpWithEmail,
+    signInWithEmail,
     signOut: handleSignOut,
+    handleGoogleSignIn,
     handleAuthCallback,
+    checkEmailVerification,
+    resendVerificationEmail,
     clearError: () => setError(null),
   };
 
