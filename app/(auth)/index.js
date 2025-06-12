@@ -63,9 +63,12 @@ export default function LoginScreen() {
           throw signUpError;
         }
         
-        console.log('Sign up successful, user:', data?.user);
+        console.log('Sign up successful, user:', data?.email);
         // Redirect to email confirmation screen with email as a query parameter
-        router.replace(`/email-confirmation?email=${encodeURIComponent(email)}`);
+        router.replace({
+          pathname: '/email-confirmation',
+          params: { email: email },
+        });
         return;
       } else {
         console.log('Calling signInWithEmail...');

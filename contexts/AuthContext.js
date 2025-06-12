@@ -49,13 +49,10 @@ export const AuthProvider = ({ children }) => {
         throw signUpError;
       }
       
-      // Don't sign in automatically, just return the sign up data
       console.log('Sign up successful, user data:', data);
       return { 
         data: { 
-          user: data.user,
-          session: data.session,
-          email: email // Explicitly pass email for confirmation screen
+          email: email // Only return the email for the confirmation screen
         }, 
         error: null 
       };
