@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function PlantInfoSection({ scientificName, family, genus, wikiUrl }) {
   const openWikiPage = () => {
@@ -8,7 +8,7 @@ export default function PlantInfoSection({ scientificName, family, genus, wikiUr
   };
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Scientific Name</Text>
+      <Text style={styles.sectionTitle}>Details</Text>
       <Text style={styles.sectionContent}>{scientificName}</Text>
       {family !== 'Not available' && (
         <View style={styles.infoRow}>

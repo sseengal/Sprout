@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,30 +21,28 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.userName}>
-              {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Plant Lover'}
-            </Text>
+      <SafeAreaView style={{ backgroundColor: '#2E7D32' }}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.title}>Sprout</Text>
+              <Text style={styles.subtitle}>Your Personal Plant Care Assistant</Text>
+            </View>
+            <TouchableOpacity onPress={handleProfilePress} style={styles.profileButton}>
+              {user?.user_metadata?.avatar_url ? (
+                <Image 
+                  source={{ uri: user.user_metadata.avatar_url }} 
+                  style={styles.avatar} 
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <MaterialIcons name="person" size={24} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={handleProfilePress} style={styles.profileButton}>
-            {user?.user_metadata?.avatar_url ? (
-              <Image 
-                source={{ uri: user.user_metadata.avatar_url }} 
-                style={styles.avatar} 
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <MaterialIcons name="person" size={24} color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Sprout</Text>
-        <Text style={styles.subtitle}>Your Personal Plant Care Assistant</Text>
-      </View>
+      </SafeAreaView>
       
       <View style={styles.content}>
         <Image 
@@ -79,18 +77,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 25,
+    paddingTop: 8,
+    paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: '#2E7D32',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
-  headerTop: {
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    width: '100%',
   },
   welcomeText: {
     color: 'rgba(255, 255, 255, 0.9)',
@@ -103,9 +101,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -121,13 +119,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 5,
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   content: {

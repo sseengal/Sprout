@@ -6,18 +6,27 @@ export function extractPlantInfo(plantData) {
   let commonName = '';
   let scientificName = '';
   let probability = 0;
+  
   if (Array.isArray(plantData.suggestions) && plantData.suggestions.length > 0) {
     const top = plantData.suggestions[0];
-    commonName = top.plant_name || '';
-    scientificName = Array.isArray(top.plant_details?.scientific_name)
-      ? top.plant_details.scientific_name[0]
-      : (top.plant_details?.scientific_name || '');
+    
+    // Get the first common name if available, otherwise use the scientific name as fallback
+    const commonNames = top.plant_details?.common_names || [];
+    commonName = commonNames.length > 0 ? commonNames[0] : '';
+    
+    // Get the scientific name
+    scientificName = top.plant_name || 
+                   (Array.isArray(top.plant_details?.scientific_name) 
+                     ? top.plant_details.scientific_name[0] 
+                     : (top.plant_details?.scientific_name || ''));
+                     
     probability = top.probability ? Math.round(top.probability * 100) : 0;
   } else {
-    commonName = plantData.plant_name || '';
+    // Fallback for non-suggestion data
+    commonName = plantData.plant_details?.common_names?.[0] || '';
     scientificName = Array.isArray(plantData.plant_details?.scientific_name)
       ? plantData.plant_details.scientific_name[0]
-      : (plantData.plant_details?.scientific_name || '');
+      : (plantData.plant_details?.scientific_name || plantData.plant_name || '');
     probability = plantData.probability ? Math.round(plantData.probability * 100) : 0;
   }
 

@@ -1,12 +1,28 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SaveButton({ onPress }) {
+  const [isSaved, setIsSaved] = useState(false);
+
+  const handlePress = () => {
+    setIsSaved(!isSaved);
+    onPress();
+  };
+
   return (
-    <TouchableOpacity style={styles.saveButton} onPress={onPress}>
-      <Ionicons name="bookmark" size={20} color="#fff" />
-      <Text style={styles.saveButtonText}>Save to My Plants</Text>
+    <TouchableOpacity 
+      style={styles.saveButton} 
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.saveText}>Save</Text>
+      <Ionicons 
+        name={isSaved ? 'bookmark' : 'bookmark-outline'} 
+        size={16} 
+        color={isSaved ? '#2E7D32' : '#2E7D32'} 
+        style={styles.icon}
+      />
     </TouchableOpacity>
   );
 }
@@ -14,18 +30,23 @@ export default function SaveButton({ onPress }) {
 const styles = StyleSheet.create({
   saveButton: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 8,
-    marginTop: 10,
-    elevation: 2,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  saveText: {
+    color: '#2E7D32',
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 10,
+    marginRight: 6,
+  },
+  icon: {
+    marginTop: 1, // Minor vertical alignment tweak
   },
 });

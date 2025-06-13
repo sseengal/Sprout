@@ -3,7 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CameraScreen from './app/(tabs)/camera';
-import PlantDetailsScreen from './app/(tabs)/plant-details';
+import PlantDetailsScreen from './app/plant-details';
 
 const Stack = createStackNavigator();
 
