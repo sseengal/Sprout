@@ -2,20 +2,85 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function CareInstructionsSection({ careTips }) {
+const CARE_ICONS = {
+  watering: 'water',
+  light: 'sunny',
+  temperature: 'thermometer',
+  humidity: 'cloud',
+  soil: 'flower',
+  feeding: 'nutrition',
+  maintenance: 'build',
+  seasonalCare: 'calendar',
+  commonIssues: 'bug',
+  propagation: 'leaf',
+};
+
+function renderValue(val, bullet = false) {
+  if (Array.isArray(val)) {
+    return val.length === 0 ? null : (
+      <View style={{ marginLeft: 10 }}>
+        {val.map((item, idx) => (
+          <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 2 }}>
+            <Text style={styles.bulletText}>{'•'}</Text>
+            <Text style={{ flex: 1 }}>{typeof item === 'object' ? renderValue(item, false) : item}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  } else if (typeof val === 'object' && val !== null) {
+    return (
+      <View style={{ marginLeft: 10 }}>
+        {Object.entries(val).map(([k, v], idx) => (
+          <View key={idx} style={{ marginBottom: 2 }}>
+            <Text style={{ fontWeight: '600', fontSize: 15 }}>{k.charAt(0).toUpperCase() + k.slice(1)}:</Text>
+            <Text style={{ marginLeft: 8 }}>{renderValue(v, false)}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  } else if (typeof val === 'string' || typeof val === 'number') {
+    return bullet ? <Text style={styles.bulletText}>• {val}</Text> : <Text style={styles.infoText}>{val}</Text>;
+  } else {
+    return null;
+  }
+}
+
+export default function CareInstructionsSection({ careTips, careDetails }) {
+  if (careDetails) {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Care Instructions</Text>
+        {Object.entries(careDetails).map(([key, val]) =>
+          val ? (
+            <View style={styles.infoRow} key={key}>
+              <Ionicons
+                name={CARE_ICONS[key] || 'leaf'}
+                size={16}
+                color="#388E3C"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.infoKey}>{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</Text>
+              <View style={{ flex: 1, marginLeft: 8 }}>{renderValue(val, Array.isArray(val))}</View>
+            </View>
+          ) : null
+        )}
+      </View>
+    );
+  }
+
+  if (!careTips || (Array.isArray(careTips) && careTips.length === 0)) {
+    return null;
+  }
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Care Instructions</Text>
-      {careTips.watering && (
-        <View style={styles.careItem}>
-          <Ionicons name="water" size={20} color="#2196F3" />
-          <View style={styles.careTextContainer}>
-            <Text style={styles.careTitle}>Watering</Text>
-            <Text style={styles.careDescription}>{careTips.watering}</Text>
-          </View>
-        </View>
-      )}
-      {careTips.sunlight && (
+      {Array.isArray(careTips)
+        ? careTips.map((tip, idx) => (
+            <Text key={idx} style={styles.bulletText}>• {tip}</Text>
+          ))
+        : <Text style={styles.sectionContent}>{careTips}</Text>
+      }
         <View style={styles.careItem}>
           <Ionicons name="sunny" size={20} color="#FFC107" />
           <View style={styles.careTextContainer}>

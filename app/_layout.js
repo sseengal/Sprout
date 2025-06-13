@@ -3,6 +3,7 @@ import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { SavedPlantsProvider } from '../contexts/SavedPlantsContext';
 
 // Create a simple logger
 const createLogger = (component) => {
@@ -214,8 +215,10 @@ function AuthLayout() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AuthLayout />
-    </AuthProvider>
+    <SavedPlantsProvider>
+      <AuthProvider>
+        <AuthLayout />
+      </AuthProvider>
+    </SavedPlantsProvider>
   );
 }

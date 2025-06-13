@@ -1,56 +1,58 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { Alert } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSavedPlants } from '../../contexts/SavedPlantsContext';
+import { useRouter } from 'expo-router';
 
-const MyPlantsScreen = ({ navigation }) => {
-  const [plants, setPlants] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const isFocused = useIsFocused();
+const MyPlantsScreen = () => {
+  const { savedPlants, removePlant } = useSavedPlants();
+  const router = useRouter();
 
-  // No storage service used anymore. Always show empty state for now.
-useEffect(() => {
-  setIsLoading(false);
-  setPlants([]);
-}, []);
+  const handleRemove = (plant) => {
+    Alert.alert(
+      'Remove Plant',
+      'Are you sure you want to remove this plant from your collection?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removePlant(plant.id) },
+      ]
+    );
+  };
 
   const renderPlantItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.plantItem}
-      onPress={() => navigation.navigate('SavedPlantDetails', { plant: item })}
-    >
-      <View style={styles.plantInfo}>
-        <Text style={styles.plantName} numberOfLines={1} ellipsizeMode="tail">
-          {item.plantName}
-        </Text>
-        {item.scientificName && (
-          <Text style={styles.scientificName} numberOfLines={1} ellipsizeMode="tail">
-            {item.scientificName}
-          </Text>
+    <View style={[styles.plantItem, { flexDirection: 'row', alignItems: 'center' }]}> 
+      <TouchableOpacity
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+        onPress={() => router.push({ pathname: '/(tabs)/Analysis', params: { plantData: JSON.stringify(item) } })}
+      >
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.plantImage} />
+        ) : (
+          <View style={[styles.plantImage, { backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center' }]}> 
+            <MaterialIcons name="local-florist" size={28} color="#bbb" />
+          </View>
         )}
-      </View>
-      <MaterialIcons name="chevron-right" size={24} color="#888" />
-    </TouchableOpacity>
+        <View style={styles.plantInfo}>
+          <Text style={styles.plantName} numberOfLines={1} ellipsizeMode="tail">
+            {item.commonName || item.scientificName || 'Unnamed Plant'}
+          </Text>
+          {item.scientificName && (
+            <Text style={styles.scientificName} numberOfLines={1} ellipsizeMode="tail">
+              {item.scientificName}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => handleRemove(item)} style={{ padding: 8 }}>
+        <MaterialIcons name="delete" size={22} color="#c62828" />
+      </TouchableOpacity>
+    </View>
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    );
-  }
-
-  if (plants.length === 0) {
+  if (!savedPlants || savedPlants.length === 0) {
     return (
       <View style={styles.centered}>
         <MaterialIcons name="local-florist" size={64} color="#DDD" />
@@ -62,10 +64,17 @@ useEffect(() => {
 
   return (
     <View style={styles.container}>
+      <SafeAreaView style={{ backgroundColor: '#2E7D32' }} edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>My Plants</Text>
+          </View>
+        </View>
+      </SafeAreaView>
       <FlatList
-        data={plants}
+        data={savedPlants}
         renderItem={renderPlantItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id?.toString()}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
@@ -78,6 +87,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF',
   },
+  header: {
+    padding: 16,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   listContent: {
     padding: 16,
   },
@@ -86,6 +108,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 8,
+  },
+  plantImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    marginRight: 14,
+    backgroundColor: '#f0f0f0',
   },
   plantInfo: {
     flex: 1,

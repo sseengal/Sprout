@@ -1,6 +1,9 @@
 // Utility to extract and normalize plant details from API or fallback data
 export function extractPlantInfo(plantData) {
-  if (!plantData) return { commonName: '', scientificName: '', family: '', genus: '', wikiUrl: '', probability: 0, careTips: {} };
+  if (!plantData) return {
+    commonName: '', scientificName: '', family: '', genus: '', wikiUrl: '', probability: 0, careTips: {},
+    origin: '', growthRate: '', matureSize: {}, toxicity: {}, funFacts: [], commonUses: [], ecologicalRole: '', culturalUses: '', historicalUses: ''
+  };
 
   // Prefer PlantNet suggestions if available
   let commonName = '';
@@ -30,8 +33,8 @@ export function extractPlantInfo(plantData) {
     probability = plantData.probability ? Math.round(plantData.probability * 100) : 0;
   }
 
-  const family = plantData.plant_details?.taxonomy?.family || '';
-  const genus = plantData.plant_details?.taxonomy?.genus || '';
+  const plantNetFamily = plantData.plant_details?.taxonomy?.family || '';
+  const plantNetGenus = plantData.plant_details?.taxonomy?.genus || '';
   const wikiUrl = plantData.plant_details?.url || null;
   const careTips = {
     watering: plantData.plant_details?.care_tips?.find(tip =>
@@ -48,13 +51,63 @@ export function extractPlantInfo(plantData) {
     })
   };
 
+  // Check for Gemini API structure (PLANT_INFO_SCHEMA)
+  let origin = '', growthRate = '', matureSize = {}, toxicity = {}, funFacts = [], commonUses = [], ecologicalRole = '', culturalUses = '', historicalUses = '', geminiFamily = '', geminiScientificName = '', geminiGenus = '';
+  if (plantData.basicInfo) {
+    origin = plantData.basicInfo.origin || '';
+    growthRate = plantData.basicInfo.growthRate || '';
+    matureSize = plantData.basicInfo.matureSize || {};
+    toxicity = plantData.basicInfo.toxicity || {};
+    geminiFamily = plantData.basicInfo.family || '';
+    geminiScientificName = plantData.basicInfo.scientificName || '';
+    geminiGenus = plantData.basicInfo.genus || '';
+  }
+  if (plantData.additionalInfo) {
+    funFacts = plantData.additionalInfo.funFacts || [];
+    commonUses = plantData.additionalInfo.commonUses || [];
+    if (plantData.additionalInfo.ecologicalRole) ecologicalRole = plantData.additionalInfo.ecologicalRole;
+    if (plantData.additionalInfo.culturalUses) culturalUses = plantData.additionalInfo.culturalUses;
+    if (plantData.additionalInfo.historicalUses) historicalUses = plantData.additionalInfo.historicalUses;
+  }
+  // For backward compatibility, check top-level fields if not present above
+  if (plantData.ecologicalRole) ecologicalRole = plantData.ecologicalRole;
+  if (plantData.culturalUses) culturalUses = plantData.culturalUses;
+  if (plantData.historicalUses) historicalUses = plantData.historicalUses;
+
+  // Extract detailed care sections from Gemini (if present)
+  let careDetails = null;
+  if (plantData.careGuide || plantData.seasonalCare || plantData.commonIssues || plantData.propagation) {
+    careDetails = {
+      watering: plantData.careGuide?.watering || null,
+      light: plantData.careGuide?.light || null,
+      temperature: plantData.careGuide?.environment?.temperature || null,
+      humidity: plantData.careGuide?.environment?.humidity || null,
+      soil: plantData.careGuide?.soil || null,
+      feeding: plantData.careGuide?.feeding || null,
+      maintenance: plantData.careGuide?.maintenance || null,
+      seasonalCare: plantData.seasonalCare || null,
+      commonIssues: plantData.commonIssues || null,
+      propagation: plantData.propagation || null,
+    };
+  }
+
   return {
     commonName,
-    scientificName,
-    family,
-    genus,
+    scientificName: geminiScientificName || scientificName,
+    family: geminiFamily || plantNetFamily,
+    genus: geminiGenus || plantNetGenus,
     wikiUrl,
     probability,
-    careTips
+    careTips,
+    careDetails, // <-- new, robust care details
+    origin,
+    growthRate,
+    matureSize,
+    toxicity,
+    funFacts,
+    commonUses,
+    ecologicalRole,
+    culturalUses,
+    historicalUses
   };
 }

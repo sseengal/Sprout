@@ -2,25 +2,18 @@ import React, { useState } from 'react';
 import { TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function SaveButton({ onPress }) {
-  const [isSaved, setIsSaved] = useState(false);
-
-  const handlePress = () => {
-    setIsSaved(!isSaved);
-    onPress();
-  };
-
+export default function SaveButton({ onPress, saved = false, label = 'Save' }) {
   return (
     <TouchableOpacity 
       style={styles.saveButton} 
-      onPress={handlePress}
+      onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={styles.saveText}>Save</Text>
+      <Text style={styles.saveText}>{label}</Text>
       <Ionicons 
-        name={isSaved ? 'bookmark' : 'bookmark-outline'} 
+        name={saved ? 'bookmark' : 'bookmark-outline'} 
         size={16} 
-        color={isSaved ? '#2E7D32' : '#2E7D32'} 
+        color={'#2E7D32'} 
         style={styles.icon}
       />
     </TouchableOpacity>

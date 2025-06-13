@@ -81,7 +81,7 @@ const CameraScreen = () => {
       
       // Navigate to results screen with the plant data
       router.push({
-        pathname: '/plant-details',
+        pathname: '/(tabs)/Analysis',
         params: { 
           plantData: JSON.stringify(plantData),
           imageUri: image
@@ -146,58 +146,58 @@ const CameraScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
-        {image ? (
-          <View style={styles.previewContainer}>
-            <Image source={{ uri: image }} style={styles.preview} />
-            <View style={styles.buttonRow}>
-              <View style={styles.buttonGroup}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Plant Identifier</Text>
+          <Text style={styles.subtitle}>Take a photo or choose from gallery</Text>
+          <View style={styles.cameraPlaceholder}>
+            {image ? (
+              <Image source={{ uri: image }} style={[styles.preview, { borderRadius: 12, width: '100%', height: '100%' }]} />
+            ) : (
+              <>
+                <MaterialIcons name="photo-camera" size={80} color="#ddd" />
+                <Text style={styles.placeholderText}>No image selected</Text>
+              </>
+            )}
+          </View>
+          <View style={styles.buttonContainer}>
+            {image ? (
+              <>
                 <TouchableOpacity
-                  style={[styles.button, { backgroundColor: '#f44336' }]}
+                  style={[styles.actionButton, { backgroundColor: '#f44336' }]}
                   onPress={() => setImage(null)}
                 >
                   <MaterialIcons name="close" size={20} color="white" />
-                  <Text style={styles.buttonText}> Retake</Text>
+                  <Text style={styles.actionButtonText}>Retake</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.button, { backgroundColor: '#4CAF50' }]}
+                  style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
                   onPress={analyzePlant}
                   disabled={isLoading}
                 >
                   <MaterialIcons name="check" size={20} color="white" />
-                  <Text style={styles.buttonText}> Use This</Text>
+                  <Text style={styles.actionButtonText}>Analyze</Text>
                 </TouchableOpacity>
-              </View>
-            </View>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: '#2E7D32' }]} 
+                  onPress={takePicture}
+                >
+                  <MaterialIcons name="camera-alt" size={24} color="white" />
+                  <Text style={styles.actionButtonText}>Take Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
+                  onPress={pickImage}
+                >
+                  <MaterialIcons name="photo-library" size={24} color="white" />
+                  <Text style={styles.actionButtonText}>Choose from Gallery</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
-        ) : (
-          <View style={styles.content}>
-            <Text style={styles.title}>Plant Identifier</Text>
-            <Text style={styles.subtitle}>Take a photo or choose from gallery</Text>
-            
-            <View style={styles.cameraPlaceholder}>
-              <MaterialIcons name="photo-camera" size={80} color="#ddd" />
-              <Text style={styles.placeholderText}>No image selected</Text>
-            </View>
-            
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#2E7D32' }]} 
-                onPress={takePicture}
-              >
-                <MaterialIcons name="camera-alt" size={24} color="white" />
-                <Text style={styles.actionButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
-                onPress={pickImage}
-              >
-                <MaterialIcons name="photo-library" size={24} color="white" />
-                <Text style={styles.actionButtonText}>Choose from Gallery</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        </View>
       </View>
     </SafeAreaView>
   );

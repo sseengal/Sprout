@@ -50,6 +50,15 @@ function ProtectedTabs() {
         }}
       />
       <Tabs.Screen
+        name="Analysis"
+        options={{
+          title: 'Analysis',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="science" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="camera"
         options={{
           title: 'Camera',

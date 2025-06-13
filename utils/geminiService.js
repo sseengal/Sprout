@@ -92,7 +92,7 @@ const CACHE_CONFIG = {
 };
 
 // In-memory cache with timestamps
-const memoryCache = new Map();
+export const memoryCache = new Map();
 let lastCleanup = Date.now();
 
 /**
@@ -212,7 +212,7 @@ export const clearGeminiCache = async () => {
  * @param {string} plantName - Common name of the plant
  * @returns {Promise<Object>} - Structured plant information
  */
-export const getPlantInfo = async (plantName) => {
+export const getPlantInfo = async (plantName, promptOverride) => {
   // Check cache first
   const cacheKey = `plant-${plantName.toLowerCase().trim()}`;
   const cached = getFromCache(cacheKey);
@@ -231,17 +231,30 @@ export const getPlantInfo = async (plantName) => {
       }
     });
 
-    const prompt = `You are a professional botanist. Provide comprehensive information about the ${plantName} plant in a structured JSON format.
+    const prompt = promptOverride || `You are a professional botanist. Provide comprehensive information about the ${plantName} plant in a structured JSON format.
 
 IMPORTANT:
 1. Be specific to the ${plantName} species. If unsure, note this and provide general info.
 2. Include both care instructions and plant details in one response.
-3. Be concise but thorough.
-4. Use metric measurements by default.
-5. Only return valid JSON, no other text.
-6. Keep responses informative but concise.
-7. Use bullet points for lists in string fields.
-8. If information is unknown, use "Unknown" or an empty string.
+3. For care instructions, provide a comprehensive, actionable guide for home growers, including:
+   - Watering (frequency, method, signs of overwatering and underwatering)
+   - Light (requirements, tolerance, ideal placement)
+   - Temperature (ideal range, min/max)
+   - Humidity (requirements, tips)
+   - Soil (type, pH, drainage)
+   - Fertilizer (type, schedule)
+   - Pruning, repotting, cleaning
+   - Seasonal care (spring, summer, fall, winter)
+   - Common issues (problems, symptoms, solutions, prevention)
+   - Propagation (methods, best time, difficulty)
+4. Present care as a detailed, step-by-step guide with bullet points and clear structure.
+5. Be concise but thorough.
+6. Use metric measurements by default.
+7. Include interesting facts, ecological role, cultural and historical uses, and any safety concerns or toxicity.
+8. If information is unavailable for a field, state 'Unknown' or leave it empty.
+9. Only return valid JSON, no other text.
+10. Keep responses informative but concise.
+11. Use bullet points for lists in string fields.
 
 Follow this exact JSON structure:
 ${PLANT_INFO_SCHEMA}`;
@@ -250,7 +263,8 @@ ${PLANT_INFO_SCHEMA}`;
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const responseText = response.text();
-    
+    // Debug log raw Gemini response
+    console.warn('[Gemini raw responseText]', responseText);
     // Parse the JSON response
     let parsedResponse;
     try {
@@ -258,6 +272,8 @@ ${PLANT_INFO_SCHEMA}`;
       const jsonMatch = responseText.match(/```(?:json)?\n([\s\S]*?)\n```/);
       const jsonString = jsonMatch ? jsonMatch[1] : responseText;
       parsedResponse = JSON.parse(jsonString);
+      // Debug log parsed Gemini response
+      console.warn('[Gemini parsed response]', parsedResponse);
     } catch (parseError) {
       console.error('Error parsing Gemini response:', parseError);
       throw new Error('Failed to parse plant information');

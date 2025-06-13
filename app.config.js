@@ -13,8 +13,8 @@ export default {
       "expo-router"
     ],
     
+    // splash image removed due to missing asset
     splash: {
-      image: './assets/splash.png',
       resizeMode: 'contain',
       backgroundColor: '#4CAF50'
     },
@@ -47,7 +47,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: './assets/adaptive-icon.png',
+        // foregroundImage removed due to missing asset
         backgroundColor: '#4CAF50'
       },
       package: 'com.yourusername.sprout',
@@ -59,8 +59,8 @@ export default {
         'READ_MEDIA_IMAGES'
       ]
     },
+    // favicon removed due to missing asset
     web: {
-      favicon: './assets/favicon.png'
     },
     plugins: [
       [
