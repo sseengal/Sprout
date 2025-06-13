@@ -2,8 +2,8 @@ import { NavigationContainer } from '@react-navigation/nest';
 import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import CameraScreen from './src/screens/CameraScreen';
-import PlantDetailsScreen from './src/screens/PlantDetailsScreen';
+import CameraScreen from './app/(tabs)/camera';
+import PlantDetailsScreen from './app/(tabs)/plant-details';
 
 const Stack = createStackNavigator();
 

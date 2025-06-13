@@ -1,8 +1,8 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { Stack, useRouter, usePathname, useSegments } from 'expo-router';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import * as Linking from 'expo-linking';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
 // Create a simple logger
 const createLogger = (component) => {

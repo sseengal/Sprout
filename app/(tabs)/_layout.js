@@ -4,6 +4,9 @@ import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect } from 'react';
 import { router } from 'expo-router';
+import MyPlantsScreen from './My plants';
+import CameraScreen from './camera';
+import ProfileScreen from './profile';
 
 function ProtectedTabs() {
   const { user, loading } = useAuth();
@@ -34,6 +37,15 @@ function ProtectedTabs() {
           title: 'Home',
           tabBarIcon: ({ color }) => (
             <MaterialIcons name="home" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="My plants"
+        options={{
+          title: 'My Plants',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="local-florist" size={24} color={color} />
           ),
         }}
       />

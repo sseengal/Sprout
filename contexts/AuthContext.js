@@ -1,6 +1,4 @@
-import { router } from 'expo-router';
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { Platform, Alert } from 'react-native';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Helper function to log with timestamp and component name
@@ -15,8 +13,11 @@ const createLogger = (component) => {
 // Create the auth context
 export const AuthContext = createContext({});
 
+import { useRouter } from 'expo-router';
+
 export const AuthProvider = ({ children }) => {
   const logger = useMemo(() => createLogger('AuthProvider'), []);
+  const router = useRouter();
 
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
@@ -604,5 +605,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export default AuthProvider;
