@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { Platform, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';

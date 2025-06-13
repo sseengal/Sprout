@@ -1,0 +1,103 @@
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
+import CameraScreen from './src/screens/CameraScreen';
+import PlantDetailsScreen from './src/screens/PlantDetailsScreen';
+import MyPlantsScreen from './app/my-plants';
+import SavedPlantDetailsScreen from './app/my-plants/SavedPlantDetailsScreen';
+
+const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
+const SavedPlantsStack = createStackNavigator();
+
+// Stack for the Camera and Plant Details
+function CameraStackScreen() {
+  return (
+    <Stack.Navigator screenOptions={{
+      headerShown: true,
+    }}>
+      <Stack.Screen 
+        name="Camera" 
+        component={CameraScreen} 
+        options={{ title: 'Identify a Plant' }}
+      />
+      <Stack.Screen 
+        name="PlantDetails" 
+        component={PlantDetailsScreen} 
+        options={{ 
+          title: 'Plant Care',
+          // Hide the tab bar when showing plant details
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+// Stack for the My Plants section
+function SavedPlantsStackScreen() {
+  return (
+    <SavedPlantsStack.Navigator>
+      <SavedPlantsStack.Screen 
+        name="MyPlantsList" 
+        component={MyPlantsScreen} 
+        options={{ title: 'My Saved Plants' }} 
+      />
+      <SavedPlantsStack.Screen 
+        name="SavedPlantDetails" 
+        component={SavedPlantDetailsScreen} 
+        options={{ title: 'Plant Details' }} 
+      />
+    </SavedPlantsStack.Navigator>
+  );
+}
+
+// Main App with Bottom Tabs
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={({ route }) => ({
+            tabBarIcon: ({ focused, color, size }) => {
+              let iconName;
+
+              if (route.name === 'Identify') {
+                iconName = focused ? 'camera-alt' : 'camera-alt-outline';
+              } else if (route.name === 'My Plants') {
+                iconName = focused ? 'local-florist' : 'local-florist-outline';
+              }
+
+              return <MaterialIcons name={iconName} size={size} color={color} />;
+            },
+            tabBarActiveTintColor: '#4CAF50',
+            tabBarInactiveTintColor: 'gray',
+            headerShown: false,
+          })}
+        >
+          <Tab.Screen 
+            name="Identify" 
+            component={CameraStackScreen} 
+            options={{ 
+              title: 'Identify',
+              tabBarLabel: 'Identify'
+            }}
+          />
+          <Tab.Screen 
+            name="My Plants" 
+            component={SavedPlantsStackScreen} 
+            options={{ 
+              title: 'My Plants',
+              tabBarLabel: 'My Plants'
+            }}
+          />
+        </Tab.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
+  );
+}
+
+
