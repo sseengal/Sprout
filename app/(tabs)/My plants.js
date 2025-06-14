@@ -1,11 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Alert } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
-import { useRouter } from 'expo-router';
 
 const MyPlantsScreen = () => {
   const { savedPlants, removePlant } = useSavedPlants();
@@ -26,7 +24,11 @@ const MyPlantsScreen = () => {
     <View style={[styles.plantItem, { flexDirection: 'row', alignItems: 'center' }]}> 
       <TouchableOpacity
         style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
-        onPress={() => router.push({ pathname: '/(tabs)/Analysis', params: { plantData: JSON.stringify(item) } })}
+        onPress={() => {
+          console.log('DEBUG: Plant item rendered:', JSON.stringify(item, null, 2));
+          Alert.alert('Plant Data', JSON.stringify(item, null, 2));
+          router.push({ pathname: '/(tabs)/Analysis', params: { plantData: JSON.stringify(item) } });
+        }}
       >
         {item.imageUri ? (
           <Image source={{ uri: item.imageUri }} style={styles.plantImage} />
@@ -37,11 +39,11 @@ const MyPlantsScreen = () => {
         )}
         <View style={styles.plantInfo}>
           <Text style={styles.plantName} numberOfLines={1} ellipsizeMode="tail">
-            {item.commonName || item.scientificName || 'Unnamed Plant'}
+            {item.plantData?.commonName || item.plantData?.scientificName || 'Unnamed Plant'}
           </Text>
-          {item.scientificName && (
+          {item.plantData?.scientificName && (
             <Text style={styles.scientificName} numberOfLines={1} ellipsizeMode="tail">
-              {item.scientificName}
+              {item.plantData.scientificName}
             </Text>
           )}
         </View>

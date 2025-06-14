@@ -116,8 +116,27 @@ export default function AnalysisScreen() {
       removePlant(plantId);
       Alert.alert('Removed', 'This plant has been removed from your collection.');
     } else {
+      console.log('DEBUG: Saving plantData:', JSON.stringify(plantData, null, 2));
+      // Extract names from the suggestions array
+      let commonName = '';
+      let scientificName = '';
+      if (
+        plantData.suggestions &&
+        plantData.suggestions.length > 0 &&
+        plantData.suggestions[0].plant_details
+      ) {
+        const details = plantData.suggestions[0].plant_details;
+        commonName = Array.isArray(details.common_names) && details.common_names.length > 0
+          ? details.common_names[0]
+          : '';
+        scientificName = details.scientific_name || '';
+      }
       addPlant({
-        plantData,
+        plantData: {
+          ...plantData,
+          commonName,
+          scientificName
+        },
         imageUri: imageUri || '',
         id: plantId,
         savedAt: Date.now(),
