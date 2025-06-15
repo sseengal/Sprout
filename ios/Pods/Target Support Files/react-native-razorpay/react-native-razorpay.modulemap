@@ -1,0 +1,6 @@
+framework module react_native_razorpay {
+  umbrella header "react-native-razorpay-umbrella.h"
+
+  export *
+  module * { export * }
+}

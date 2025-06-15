@@ -72,6 +72,7 @@ export default {
       ]
     ],
     extra: {
+      razorpayKey: process.env.EXPO_PUBLIC_RAZORPAY_KEY,
       env: {
         PLANT_ID_API_KEY: process.env.PLANT_ID_API_KEY,
         ENABLE_LOGGING: process.env.ENABLE_LOGGING === 'true',
