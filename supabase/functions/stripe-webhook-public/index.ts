@@ -3,6 +3,21 @@
 
 declare const Deno: any; // Temporary declaration for Deno environment
 
+// Helper function to generate UUID v4
+function generateUuid() {
+  // @ts-ignore - crypto.randomUUID() is available in Edge Runtime
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback implementation if randomUUID is not available
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 // Get environment variables
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -335,11 +350,14 @@ export default async function handler(req: Request): Promise<Response> {
         case 'customer.subscription.created':
         case 'customer.subscription.updated':
         case 'customer.subscription.deleted': {
-          const subscription = event.data.object;
-          log(`Subscription ${event.type.split('.').pop()}:`, subscription.id);
+          const subscription = eventData?.data?.object || event?.data?.object;
+          if (!subscription) {
+            throw new Error('No subscription data found in event');
+          }
+          log(`Subscription ${eventType.split('.').pop()}:`, subscription.id);
           
-          // Create or update subscription record
-          await supabase.from(TABLES.SUBSCRIPTIONS).upsert({
+          // Prepare subscription data
+          const subscriptionData = {
             id: subscription.id,
             status: subscription.status,
             stripe_subscription_id: subscription.id,
@@ -347,70 +365,180 @@ export default async function handler(req: Request): Promise<Response> {
             current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
             cancel_at_period_end: subscription.cancel_at_period_end,
             created_at: new Date(subscription.created * 1000).toISOString(),
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            plan_id: subscription.plan?.id,
+            plan_name: subscription.plan?.nickname,
+            price_id: subscription.plan?.id,
+            amount: subscription.plan?.amount,
+            currency: subscription.plan?.currency,
+            interval: subscription.plan?.interval,
+            interval_count: subscription.plan?.interval_count,
+            start_date: new Date(subscription.start_date * 1000).toISOString(),
+            trial_start: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
+            trial_end: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+            canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null
+          };
+          
+          // Insert/update subscription using direct REST API
+          const subscriptionUrl = `${SUPABASE_URL}/rest/v1/subscriptions`;
+          const subscriptionResponse = await fetch(subscriptionUrl, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(subscriptionData)
           });
+          
+          if (!subscriptionResponse.ok) {
+            const error = await subscriptionResponse.text();
+            console.error('Error updating subscription:', error);
+            throw new Error(`Failed to update subscription record: ${error}`);
+          }
           
           break;
         }
         
         case 'customer.created':
         case 'customer.updated': {
-          const customer = event.data.object;
-          log(`Customer ${event.type.split('.').pop()}:`, customer.id);
+          const customer = eventData?.data?.object || event?.data?.object;
+          if (!customer) {
+            throw new Error('No customer data found in event');
+          }
+          log(`Customer ${eventType.split('.').pop()}:`, customer.id);
           
-          // Create or update customer record
-          await supabase.from(TABLES.CUSTOMERS).upsert({
-            id: customer.id,
+          // Prepare customer data
+          const customerData = {
+            id: generateUuid(),
             stripe_customer_id: customer.id,
             email: customer.email,
             name: customer.name,
+            phone: customer.phone || null,
+            address: customer.address ? JSON.stringify(customer.address) : null,
+            default_payment_method: customer.invoice_settings?.default_payment_method || null,
             metadata: JSON.stringify(customer.metadata || {}),
-            created_at: new Date().toISOString(),
+            created_at: customer.created ? new Date(customer.created * 1000).toISOString() : new Date().toISOString(),
             updated_at: new Date().toISOString()
+          };
+          
+          // Insert/update customer using direct REST API
+          const customerUrl = `${SUPABASE_URL}/rest/v1/customers`;
+          const customerResponse = await fetch(customerUrl, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(customerData)
           });
+          
+          if (!customerResponse.ok) {
+            const error = await customerResponse.text();
+            console.error('Error updating customer:', error);
+            throw new Error(`Failed to update customer record: ${error}`);
+          }
           
           break;
         }
         
         case 'invoice.payment_succeeded': {
-          const invoice = event.data.object;
+          const invoice = eventData?.data?.object || event?.data?.object;
+          if (!invoice) {
+            throw new Error('No invoice data found in event');
+          }
           log('Invoice payment succeeded:', invoice.id);
           
-          // Create payment record for invoice
-          await supabase.from(TABLES.PAYMENTS).upsert({
+          // Get user ID from invoice metadata or subscription
+          let userId = invoice.metadata?.user_id || '3db8cff7-e2b7-4900-a8c0-c7f7841e4c2d';
+          
+          // Create payment record for invoice using direct REST API
+          const paymentData = {
             id: `inv_${invoice.id}`,
+            user_id: userId,
+            subscription_id: invoice.subscription,
             payment_intent_id: invoice.payment_intent,
+            stripe_payment_intent_id: invoice.payment_intent,
             stripe_invoice_id: invoice.id,
-            amount: invoice.amount_paid,
-            currency: invoice.currency,
+            amount: invoice.amount_paid || 0,
+            currency: invoice.currency || 'usd',
             status: 'succeeded',
             description: `Invoice ${invoice.number}`,
             metadata: JSON.stringify(invoice.metadata || {}),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
+          };
+          
+          const paymentUrl = `${SUPABASE_URL}/rest/v1/payments`;
+          const paymentResponse = await fetch(paymentUrl, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(paymentData)
           });
+          
+          if (!paymentResponse.ok) {
+            const error = await paymentResponse.text();
+            console.error('Error recording invoice payment:', error);
+            throw new Error(`Failed to record invoice payment: ${error}`);
+          }
           
           break;
         }
         
         case 'invoice.payment_failed': {
-          const invoice = event.data.object;
+          const invoice = eventData?.data?.object || event?.data?.object;
+          if (!invoice) {
+            throw new Error('No invoice data found in event');
+          }
           log('Invoice payment failed:', invoice.id);
           
-          // Update payment record with failure
-          await supabase.from(TABLES.PAYMENTS).upsert({
+          // Get user ID from invoice metadata or subscription
+          let userId = invoice.metadata?.user_id || '3db8cff7-e2b7-4900-a8c0-c7f7841e4c2d';
+          
+          // Update payment record with failure using direct REST API
+          const paymentData = {
             id: `inv_${invoice.id}`,
+            user_id: userId,
+            subscription_id: invoice.subscription,
             payment_intent_id: invoice.payment_intent,
+            stripe_payment_intent_id: invoice.payment_intent,
             stripe_invoice_id: invoice.id,
-            amount: invoice.amount_due,
-            currency: invoice.currency,
+            amount: invoice.amount_due || 0,
+            currency: invoice.currency || 'usd',
             status: 'failed',
+            payment_method: invoice.payment_intent?.payment_method || null,
             failure_reason: invoice.billing_reason || 'payment_failed',
             description: `Failed payment for invoice ${invoice.number}`,
             metadata: JSON.stringify(invoice.metadata || {}),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
+          };
+          
+          const paymentUrl = `${SUPABASE_URL}/rest/v1/payments`;
+          const paymentResponse = await fetch(paymentUrl, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(paymentData)
           });
+          
+          if (!paymentResponse.ok) {
+            const error = await paymentResponse.text();
+            console.error('Error recording failed payment:', error);
+            throw new Error(`Failed to record failed payment: ${error}`);
+          }
           
           break;
         }

@@ -89,10 +89,32 @@ export const AuthProvider = ({ children }) => {
         throw signUpError;
       }
 
-      logger('Sign up successful, user data:', data);
+      logger('Sign up successful, creating customer record...');
+      
+      // Create a customer record after successful signup
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .insert({
+          user_id: data.user.id,
+          email: email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (customerError) {
+        logger('Error creating customer record:', customerError);
+        // Don't fail the signup if customer record creation fails
+        // The record can be created later when needed
+      } else {
+        logger('Customer record created:', customerData);
+      }
+
       return { 
         data: { 
-          email: email // Only return the email for the confirmation screen
+          email: email, // Only return the email for the confirmation screen
+          userId: data.user.id
         }, 
         error: null 
       };
