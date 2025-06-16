@@ -195,7 +195,18 @@ function AuthLayout() {
       // If on any protected route (not root or (auth)), always redirect to /(auth)
       logger('User is not signed in and not in auth group, redirecting to /(auth)', { pathname, segments });
       if (error) {
-        navigate({ pathname: '/(auth)', params: { mode: 'signup', error: error?.toString() } });
+        // Determine mode from params, segments, or default to 'login'
+        let currentMode = 'login';
+        if (typeof params === 'object' && params.mode) {
+          currentMode = params.mode;
+        } else if (Array.isArray(segments)) {
+          if (segments.includes('signup')) currentMode = 'signup';
+          if (segments.includes('login')) currentMode = 'login';
+        } else if (pathname && pathname.includes('signup')) {
+          currentMode = 'signup';
+        }
+        logger(`Redirecting with error, preserving mode: ${currentMode}`);
+        navigate({ pathname: '/(auth)', params: { mode: currentMode, error: error?.toString() } });
       } else {
         navigate('/(auth)');
       }

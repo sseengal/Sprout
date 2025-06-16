@@ -8,7 +8,7 @@ import { useLocalSearchParams } from 'expo-router';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, loading, error: authError } = useAuth();
+  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, loading, error: authError, clearError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,11 +22,15 @@ export default function LoginScreen() {
 
   const params = useLocalSearchParams();
   useEffect(() => {
+    // Only set mode from URL params on initial load or explicit navigation
     if (params.mode === 'signup') {
       setIsSignUp(true);
       if (params.error) setFormError(params.error);
+    } else if (params.mode === 'login') {
+      setIsSignUp(false);
+      if (params.error) setFormError(params.error);
     }
-  }, [params]);
+  }, [params.mode, params.error]);
 
   const handleGoogleLogin = async () => {
     console.log('Google Sign-In button pressed');
@@ -168,8 +172,25 @@ export default function LoginScreen() {
   };
 
   const toggleAuthMode = () => {
-    setIsSignUp(!isSignUp);
+    console.log('[toggleAuthMode] called. Current isSignUp:', isSignUp, 'formError:', formError, 'authError:', authError);
+    
+    // Reset all form fields and errors
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setEmailError('');
+    setPasswordError('');
+    setConfirmPasswordError && setConfirmPasswordError('');
     setFormError('');
+    
+    // Clear auth error from context
+    clearError && clearError();
+    
+    // Toggle signup mode - do this last to ensure clean state for the new mode
+    setIsSignUp(prev => !prev);
+    
+    // Force a router refresh to clear any URL params that might be setting the mode
+    router.setParams({});
   };
 
   // For now, we'll keep the Facebook button but it won't do anything
@@ -391,12 +412,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderLeftWidth: 4,
     borderLeftColor: '#D32F2F',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     color: '#ff3b30',
     fontSize: 14,
-    marginTop: 8,
     textAlign: 'center',
+    width: '100%',
   },
   errorTextSmall: {
     color: '#ff3b30',
