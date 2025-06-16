@@ -2,11 +2,13 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicat
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+import { useLocalSearchParams } from 'expo-router';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, testDeepLink, loading, error: authError } = useAuth();
+  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, loading, error: authError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,6 +16,17 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
+  const params = useLocalSearchParams();
+  useEffect(() => {
+    if (params.mode === 'signup') {
+      setIsSignUp(true);
+      if (params.error) setFormError(params.error);
+    }
+  }, [params]);
 
   const handleGoogleLogin = async () => {
     console.log('Google Sign-In button pressed');
@@ -39,6 +52,45 @@ export default function LoginScreen() {
     }
   };
 
+  const validateEmail = (email) => {
+    if (!email) return 'Email is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Please enter a valid email address';
+    return '';
+  };
+
+  const validatePassword = (pwd, isConfirm = false) => {
+    if (!pwd) return 'Password is required';
+    if (pwd.length < 6) return 'Password must be at least 6 characters';
+    if (!/[A-Z]/.test(pwd)) return 'Include at least one uppercase letter';
+    if (!/[a-z]/.test(pwd)) return 'Include at least one lowercase letter';
+    if (!/[0-9]/.test(pwd)) return 'Include at least one number';
+    if (isConfirm && pwd !== password) return 'Passwords do not match';
+    return '';
+  };
+
+  const handlePasswordChange = (text) => {
+    setPassword(text);
+    if (isSignUp) {
+      setPasswordError(validatePassword(text));
+      if (confirmPassword) {
+        setConfirmPasswordError(validatePassword(confirmPassword, true));
+      }
+    }
+  };
+
+  const handleConfirmPasswordChange = (text) => {
+    setConfirmPassword(text);
+    if (isSignUp) {
+      setConfirmPasswordError(validatePassword(text, true));
+    }
+  };
+
+  const handleEmailChange = (text) => {
+    setEmail(text);
+    if (formError) setFormError('');
+    setEmailError(validateEmail(text));
+  };
+
   const handleEmailSubmit = async () => {
     console.log('handleEmailSubmit called, isSignUp:', isSignUp);
     try {
@@ -46,25 +98,25 @@ export default function LoginScreen() {
       setFormError('');
       
       // Basic validation
-      if (!email || !password) {
-        const errorMsg = 'Please fill in all fields';
-        console.log('Validation error:', errorMsg);
-        setFormError(errorMsg);
+      const emailErr = validateEmail(email);
+      setEmailError(emailErr);
+      
+      if (emailErr) {
+        console.log('Email validation failed');
         return;
       }
       
-      if (isSignUp && password !== confirmPassword) {
-        const errorMsg = 'Passwords do not match';
-        console.log('Validation error:', errorMsg);
-        setFormError(errorMsg);
-        return;
-      }
-      
-      if (isSignUp && password.length < 6) {
-        const errorMsg = 'Password must be at least 6 characters';
-        console.log('Validation error:', errorMsg);
-        setFormError(errorMsg);
-        return;
+      if (isSignUp) {
+        const pwdError = validatePassword(password);
+        const confirmPwdError = validatePassword(confirmPassword, true);
+        
+        setPasswordError(pwdError);
+        setConfirmPasswordError(confirmPwdError);
+        
+        if (pwdError || confirmPwdError) {
+          console.log('Password validation failed');
+          return;
+        }
       }
       
       console.log('Form validation passed, attempting authentication...');
@@ -80,12 +132,14 @@ export default function LoginScreen() {
         }
         
         console.log('Sign up successful, user:', data?.email);
-        // Redirect to email confirmation screen with email as a query parameter
-        router.replace({
-          pathname: '/email-confirmation',
-          params: { email: email },
-        });
-        return;
+        // Only redirect on successful signup
+        if (data?.email) {
+          router.replace({
+            pathname: '/email-confirmation',
+            params: { email: email },
+          });
+          return;
+        }
       } else {
         console.log('Calling signInWithEmail...');
         const { data, error: signInError } = await signInWithEmail(email, password);
@@ -147,50 +201,77 @@ export default function LoginScreen() {
             )}
 
             <View style={styles.form}>
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="email" size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#999"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="lock" size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoComplete="password"
-                  textContentType="password"
-                />
-              </View>
-
-              {isSignUp && (
-                <View style={styles.inputContainer}>
-                  <MaterialIcons name="lock-outline" size={20} color="#666" style={styles.inputIcon} />
+              <View>
+                <View style={[
+                  styles.inputContainer,
+                  emailError && styles.inputContainerError
+                ]}>
+                  <MaterialIcons name="email" size={20} color="#666" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Confirm Password"
+                    placeholder="Email"
                     placeholderTextColor="#999"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
+                    value={email}
+                    onChangeText={handleEmailChange}
+                    onBlur={() => setEmailError(validateEmail(email))}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                  />
+                </View>
+                {emailError ? (
+                  <Text style={styles.errorTextBelow}>{emailError}</Text>
+                ) : null}
+              </View>
+
+              <View>
+                <View style={[
+                  styles.inputContainer,
+                  passwordError && styles.inputContainerError
+                ]}>
+                  <MaterialIcons name="lock" size={20} color="#666" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Password"
+                    placeholderTextColor="#999"
+                    value={password}
+                    onChangeText={handlePasswordChange}
+                    onBlur={() => isSignUp && setPasswordError(validatePassword(password))}
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="password"
                     textContentType="password"
                   />
+                </View>
+                {isSignUp && passwordError ? (
+                  <Text style={styles.errorTextBelow}>{passwordError}</Text>
+                ) : null}
+              </View>
+
+              {isSignUp && (
+                <View>
+                  <View style={[
+                    styles.inputContainer,
+                    confirmPasswordError && styles.inputContainerError
+                  ]}>
+                    <MaterialIcons name="lock-outline" size={20} color="#666" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirm Password"
+                      placeholderTextColor="#999"
+                      value={confirmPassword}
+                      onChangeText={handleConfirmPasswordChange}
+                      onBlur={() => setConfirmPasswordError(validatePassword(confirmPassword, true))}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoComplete="password"
+                      textContentType="password"
+                    />
+                  </View>
+                  {confirmPasswordError ? (
+                    <Text style={styles.errorTextBelow}>{confirmPasswordError}</Text>
+                  ) : null}
                 </View>
               )}
 
@@ -267,16 +348,6 @@ export default function LoginScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              
-              {/* Test Deep Link Button - Remove in production */}
-              <TouchableOpacity 
-                style={[styles.button, { marginTop: 20, backgroundColor: '#666' }]}
-                onPress={testDeepLink}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.buttonText}>Test Deep Link</Text>
-              </TouchableOpacity>
-              
             </View>
           </View>
         </ScrollView>
@@ -322,11 +393,26 @@ const styles = StyleSheet.create({
     borderLeftColor: '#D32F2F',
   },
   errorText: {
-    color: '#D32F2F',
+    color: '#ff3b30',
     fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
-  form: {
-    width: '100%',
+  errorTextSmall: {
+    color: '#ff3b30',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 8,
+  },
+  inputContainerError: {
+    borderColor: '#ff3b30',
+    marginBottom: 4,
+  },
+  errorTextBelow: {
+    color: '#ff3b30',
+    fontSize: 12,
+    marginLeft: 8,
+    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',

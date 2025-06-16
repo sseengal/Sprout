@@ -20,7 +20,7 @@ function AuthLayout() {
   const instanceId = useMemo(() => `AuthLayout-${Math.random().toString(36).substr(2, 9)}`, []);
   const logger = useMemo(() => createLogger(instanceId), [instanceId]);
   
-  const { user, loading, handleAuthCallback } = useAuth();
+  const { user, loading, error, handleAuthCallback } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -145,6 +145,12 @@ function AuthLayout() {
     if (!isMounted.current) return;
     logger('NAV CHECK', { pathname, segments, user, loading });
     
+    // Skip navigation if we're in the middle of an auth operation
+    if (pathname === '/(auth)' && pathname.includes('error=')) {
+      logger('Auth error detected, skipping navigation');
+      return;
+    }
+    
     if (loading) {
       logger('Auth state loading, skipping navigation');
       return;
@@ -174,14 +180,26 @@ function AuthLayout() {
       }
     };
 
-    // Robust navigation: if not authenticated and not in (auth), always go to '/(auth)'
+    // Add debug logs for redirect logic
     const firstSegment = segments[0];
+    logger('REDIRECT CHECK', { pathname, segments, firstSegment, error });
     if (!user) {
-      if (firstSegment !== '(auth)') {
-        logger('User is not signed in and not in auth group, redirecting to /(auth)', { pathname, segments });
-        navigate('/(auth)');
+      // If on root or (auth) group and there is an error, suppress ALL navigation (remain on current screen)
+      if (
+        (firstSegment === '(auth)' || pathname === '/(auth)' || (pathname === '/' && segments.length === 0))
+        && error
+      ) {
+        logger('On auth route or root with error, not redirecting (sticky error state)');
         return;
       }
+      // If on any protected route (not root or (auth)), always redirect to /(auth)
+      logger('User is not signed in and not in auth group, redirecting to /(auth)', { pathname, segments });
+      if (error) {
+        navigate({ pathname: '/(auth)', params: { mode: 'signup', error: error?.toString() } });
+      } else {
+        navigate('/(auth)');
+      }
+      return;
     } else {
       if (firstSegment === '(auth)' && !isEmailConfirmationScreen) {
         logger('User is signed in and in auth group, redirecting to app', { pathname, segments });

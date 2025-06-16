@@ -33,26 +33,60 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     logger('Setting up auth state listener');
     
+    // Track if we're in the middle of an auth operation
+    let isAuthInProgress = false;
+    
     // Check active sessions and sets the user
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const sessionId = session?.user?.id || 'no-session';
       logger(`Auth state changed - Event: ${event}, Session ID: ${sessionId}`);
       
-      // Log the previous and new user IDs to track changes
-      // Note: user may be stale here, but we only need to log
-      // const prevUserId = user?.id || 'none';
-      // const newUserId = session?.user?.id || 'none';
-      // if (prevUserId !== newUserId) {
-      //   logger(`User changed from ${prevUserId} to ${newUserId}`);
-      // }
+      // Skip state updates during auth operations to prevent UI flicker
+      if (isAuthInProgress) {
+        logger(`Skipping state update during auth operation: ${event}`);
+        return;
+      }
       
-      setSession(session);
-      setUser(session?.user ?? null);
+      // Only update state for relevant auth events
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_OUT') {
+        logger(`Skipping state update for event: ${event}`);
+        return;
+      }
+      
+      // Only update state if we have a valid session
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+      }
       
       // Always set loading to false after we've processed the auth state
       logger('Auth state processed, setting loading to false');
       setLoading(false);
     });
+    
+    // Store the original signIn and signUp functions
+    const originalSignIn = supabase.auth.signInWithPassword;
+    const originalSignUp = supabase.auth.signUp;
+    
+    // Wrap the signIn function to track auth operations
+    supabase.auth.signInWithPassword = async (...args) => {
+      isAuthInProgress = true;
+      try {
+        return await originalSignIn.apply(supabase.auth, args);
+      } finally {
+        isAuthInProgress = false;
+      }
+    };
+    
+    // Wrap the signUp function to track auth operations
+    supabase.auth.signUp = async (...args) => {
+      isAuthInProgress = true;
+      try {
+        return await originalSignUp.apply(supabase.auth, args);
+      } finally {
+        isAuthInProgress = false;
+      }
+    };
 
     // Cleanup subscription on unmount
     return () => {
