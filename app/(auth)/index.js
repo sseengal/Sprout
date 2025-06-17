@@ -1,4 +1,4 @@
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, AntDesign } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -347,7 +347,7 @@ export default function LoginScreen() {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <>
-                    <MaterialIcons name="google" size={20} color="#fff" />
+                    <AntDesign name="google" size={20} color="#fff" />
                     <Text style={styles.socialButtonText}>Continue with Google</Text>
                   </>
                 )}
@@ -362,7 +362,7 @@ export default function LoginScreen() {
                 onPress={handleFacebookLogin}
                 disabled={true}
               >
-                <MaterialIcons name="facebook" size={20} color="#4267B2" />
+                <AntDesign name="facebook-square" size={20} color="#4267B2" />
                 <Text style={[styles.socialButtonText, { color: '#4267B2' }]}>
                   Continue with Facebook
                 </Text>
