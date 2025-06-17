@@ -49,8 +49,8 @@ function AuthLayout() {
 
   // Check if the current route is in the auth group
   const isInAuthGroup = segments[0] === '(auth)';
-  // Check if the current route is the email confirmation screen
-  const isEmailConfirmationScreen = pathname === '/email-confirmation';
+  // Check if the current route is the email confirmation screen - check both possible paths
+  const isEmailConfirmationScreen = pathname === '/(auth)/email-confirmation' || pathname.includes('/email-confirmation');
 
   // Handle deep links
   const handleDeepLink = useCallback(async (event) => {
@@ -184,35 +184,29 @@ function AuthLayout() {
     const firstSegment = segments[0];
     logger('REDIRECT CHECK', { pathname, segments, firstSegment, error });
     if (!user) {
-      // If on root or (auth) group and there is an error, suppress ALL navigation (remain on current screen)
-      if (
-        (firstSegment === '(auth)' || pathname === '/(auth)' || (pathname === '/' && segments.length === 0))
-        && error
-      ) {
-        logger('On auth route or root with error, not redirecting (sticky error state)');
+      // Only suppress redirect if on (auth), '/(auth)', or root with no segments, and error is present
+      if (((firstSegment === '(auth)') || pathname === '/(auth)' || (pathname === '/' && segments.length === 0)) && error) {
+        logger('On auth route or root with error, not redirecting');
         return;
       }
-      // If on any protected route (not root or (auth)), always redirect to /(auth)
+      // On any other route, always redirect to /(auth) if user is null
       logger('User is not signed in and not in auth group, redirecting to /(auth)', { pathname, segments });
-      if (error) {
-        // Determine mode from params, segments, or default to 'login'
-        let currentMode = 'login';
-        if (typeof params === 'object' && params.mode) {
-          currentMode = params.mode;
-        } else if (Array.isArray(segments)) {
-          if (segments.includes('signup')) currentMode = 'signup';
-          if (segments.includes('login')) currentMode = 'login';
-        } else if (pathname && pathname.includes('signup')) {
-          currentMode = 'signup';
-        }
-        logger(`Redirecting with error, preserving mode: ${currentMode}`);
-        navigate({ pathname: '/(auth)', params: { mode: currentMode, error: error?.toString() } });
-      } else {
-        navigate('/(auth)');
-      }
+      navigate('/(auth)');
       return;
     } else {
-      if (firstSegment === '(auth)' && !isEmailConfirmationScreen) {
+      // Don't redirect away from email confirmation screen even if user is signed in
+      if (pathname === '/(auth)/email-confirmation' || pathname.includes('/email-confirmation')) {
+        logger('On email confirmation screen, not redirecting', { pathname });
+        return;
+      }
+      
+      if (firstSegment === '(auth)') {
+        // Skip navigation if we're in the process of signing up
+        if (pathname === '/(auth)' && sessionStorage?.getItem('isSigningUp') === 'true') {
+          logger('In sign-up process, not redirecting', { pathname });
+          return;
+        }
+        
         logger('User is signed in and in auth group, redirecting to app', { pathname, segments });
         navigate('/(tabs)');
         return;
@@ -236,7 +230,6 @@ function AuthLayout() {
     }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(auth)" />
-      <Stack.Screen name="email-confirmation" options={{ presentation: 'modal' }} />
       <Stack.Screen name="auth/callback" />
     </Stack>
   );

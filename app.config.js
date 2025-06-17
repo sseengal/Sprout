@@ -1,3 +1,4 @@
+// Force Expo Go mode and fix URL issues
 export default {
   expo: {
     name: 'Sprout',
@@ -8,6 +9,9 @@ export default {
     icon: './assets/icon.png',
     scheme: 'sprout',
     userInterfaceStyle: 'automatic',
+    // Ensure Expo Go compatibility
+    jsEngine: 'hermes',
+    // Disable dev client
     plugins: [
       "expo-web-browser",
       "expo-router"

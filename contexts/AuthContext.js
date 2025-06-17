@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import Constants from 'expo-constants';
 
 // Helper function to log with timestamp and component name
 const createLogger = (component) => {
@@ -108,11 +109,19 @@ export const AuthProvider = ({ children }) => {
 
       // Sign up the user
       logger('Calling supabase.auth.signUp...');
+      
+      // Get the current URL for redirection
+      const redirectUrl = Constants?.expoConfig?.extra?.authRedirectUrl || 
+                         process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL || 
+                         'exp://localhost:8081/--/email-confirmation';
+      
+      logger('Using email redirect URL:', redirectUrl);
+      
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: 'exp://192.168.1.36:8081/--/email-confirmation',
+          emailRedirectTo: redirectUrl,
         },
       });
 
@@ -125,12 +134,16 @@ export const AuthProvider = ({ children }) => {
 
       logger('Sign up successful, creating customer record...');
       
-      // Create a customer record after successful signup
+      // Create a customer record after successful signup with all required fields
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
         .insert({
           user_id: data.user.id,
           email: email,
+          name: email.split('@')[0], // Default name from email
+          subscription_status: 'inactive',
+          plan_type: 'free',
+          billing_interval: 'month',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -168,6 +181,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Helper function to ensure a customer record exists for the user
+  const ensureCustomerRecord = async (userId, email) => {
+    try {
+      // Check if customer record exists
+      const { data: existingCustomer, error: fetchError } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      // If no customer record exists, create one
+      if (!existingCustomer) {
+        logger('No customer record found, creating one for user:', userId);
+        const { data: newCustomer, error: createError } = await supabase
+          .from('customers')
+          .insert({
+            user_id: userId,
+            email: email,
+            name: email.split('@')[0],
+            subscription_status: 'inactive',
+            plan_type: 'free',
+            billing_interval: 'month',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        logger('Created new customer record:', newCustomer);
+      }
+    } catch (error) {
+      logger('Error in ensureCustomerRecord:', error);
+      // Don't fail the sign-in if customer record handling fails
+    }
+  };
+
   // Sign in with email and password
   const signInWithEmail = async (email, password) => {
     logger('Attempting to sign in with:', { email });
@@ -186,6 +238,11 @@ export const AuthProvider = ({ children }) => {
       if (signInError) {
         logger('Sign in error:', signInError);
         throw signInError;
+      }
+
+      // Ensure customer record exists after successful sign-in
+      if (data?.user?.id) {
+        await ensureCustomerRecord(data.user.id, email);
       }
 
       logger('Sign in successful, user data:', data);
@@ -518,6 +575,10 @@ export const AuthProvider = ({ children }) => {
           if (!user) throw new Error('No user data available after authentication');
           
           console.log('[Auth] User authenticated successfully:', user.email);
+          
+          // Ensure customer record exists
+          await ensureCustomerRecord(user.id, user.email);
+          
           setUser(user);
           setSession(newSession);
           currentRouter.replace('/(tabs)');
@@ -539,6 +600,10 @@ export const AuthProvider = ({ children }) => {
         if (!user) throw new Error('No user data available after authentication');
         
         console.log('[Auth] User authenticated successfully (direct session):', user.email);
+        
+        // Ensure customer record exists
+        await ensureCustomerRecord(user.id, user.email);
+        
         setUser(user);
         setSession(newSession);
         currentRouter.replace('/(tabs)');
@@ -559,6 +624,10 @@ export const AuthProvider = ({ children }) => {
         if (!user) throw new Error('No user data available in callback');
         
         console.log('[Auth] User authenticated successfully (custom scheme):', user.email);
+        
+        // Ensure customer record exists
+        await ensureCustomerRecord(user.id, user.email);
+        
         setUser(user);
         setSession(newSession);
         currentRouter.replace('/(tabs)');

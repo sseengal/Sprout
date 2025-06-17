@@ -24,10 +24,12 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
 // Database tables
+// Note: We've consolidated to a single customers table that includes subscription and payment data
 const TABLES = {
+  CUSTOMERS: 'customers',
+  // Legacy tables - maintained for backward compatibility
   PAYMENTS: 'payments',
-  SUBSCRIPTIONS: 'subscriptions',
-  CUSTOMERS: 'customers'
+  SUBSCRIPTIONS: 'subscriptions'
 };
 
 // CORS headers
@@ -257,7 +259,7 @@ export default async function handler(req: Request): Promise<Response> {
           log(`Using user ID for payment: ${userId}`);
           
           // Check if the user exists in the customers table using direct REST API
-          const checkCustomerUrl = `${SUPABASE_URL}/rest/v1/customers?user_id=eq.${userId}&select=user_id`;
+          const checkCustomerUrl = `${SUPABASE_URL}/rest/v1/customers?user_id=eq.${userId}&select=id,user_id,stripe_customer_id`;
           const checkResponse = await fetch(checkCustomerUrl, {
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -265,31 +267,81 @@ export default async function handler(req: Request): Promise<Response> {
             }
           });
           
-          const customerData = await checkResponse.json();
+          let customerData = await checkResponse.json();
+          let customerId;
           
           if (!checkResponse.ok || !customerData || customerData.length === 0) {
             // Create a customer record if it doesn't exist
             const createCustomerUrl = `${SUPABASE_URL}/rest/v1/customers`;
-            await fetch(createCustomerUrl, {
+            const newCustomer = {
+              user_id: userId,
+              email: paymentIntent.receipt_email || 'test@example.com',
+              stripe_customer_id: paymentIntent.customer || `cus_test_${Date.now()}`,
+              name: paymentIntent.customer_details?.name || '',
+              // Required fields with defaults
+              subscription_status: 'inactive',
+              plan_type: 'free', // Default plan type
+              billing_interval: 'month', // Default billing interval
+              // Optional fields
+              phone: paymentIntent.customer_details?.phone || '',
+              // Timestamps
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+            
+            const createResponse = await fetch(createCustomerUrl, {
               method: 'POST',
               headers: {
                 'apikey': SUPABASE_SERVICE_ROLE_KEY,
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'resolution=merge-duplicates',
+                'Prefer': 'return=representation',
               },
-              body: JSON.stringify({
-                user_id: userId,
-                email: paymentIntent.receipt_email || 'test@example.com',
-                stripe_customer_id: paymentIntent.customer || `cus_test_${Date.now()}`,
-                name: paymentIntent.customer_details?.name || '',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
+              body: JSON.stringify(newCustomer)
             });
+            
+            if (createResponse.ok) {
+              const createdCustomer = await createResponse.json();
+              customerId = createdCustomer[0]?.id;
+            } else {
+              const error = await createResponse.text();
+              console.error('Error creating customer:', error);
+              throw new Error(`Failed to create customer record: ${error}`);
+            }
+          } else {
+            customerId = customerData[0].id;
           }
           
-          // Generate a UUID for the payment record
+          // Update customer with payment intent information
+          const customerUpdateData: Record<string, any> = {
+            last_payment_date: new Date().toISOString(),
+            last_payment_amount: paymentIntent.amount || 0,
+            last_payment_status: paymentIntent.status || 'succeeded',
+            payment_method_type: paymentIntent.payment_method_types?.[0] || 'card',
+            stripe_payment_intent_id: paymentIntent.id,
+            updated_at: new Date().toISOString()
+          };
+          
+          // Update customer with payment data
+          const customerUpdateUrl = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customerId}`;
+          const customerUpdateResponse = await fetch(customerUpdateUrl, {
+            method: 'PATCH',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(customerUpdateData)
+          });
+          
+          if (!customerUpdateResponse.ok) {
+            const error = await customerUpdateResponse.text();
+            console.error('Error updating customer payment data:', error);
+            throw new Error(`Failed to update customer payment data: ${error}`);
+          }
+          
+          // For backward compatibility, also create a payment record
           const paymentId = crypto.randomUUID();
           
           // Insert payment record using direct REST API
@@ -301,13 +353,17 @@ export default async function handler(req: Request): Promise<Response> {
             amount: paymentIntent.amount || 0,
             currency: paymentIntent.currency || 'usd',
             status: paymentIntent.status || 'succeeded',
-            payment_method: paymentIntent.payment_method || 'card',
-            created_at: new Date().toISOString(),
+            payment_method: paymentIntent.payment_method || 
+                         (paymentIntent.payment_method_types && paymentIntent.payment_method_types[0]) || 
+                         'card',
+            created_at: paymentIntent.created 
+              ? new Date(paymentIntent.created * 1000).toISOString() 
+              : new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
           
           const paymentUrl = `${SUPABASE_URL}/rest/v1/payments`;
-          const paymentResponse = await fetch(paymentUrl, {
+          await fetch(paymentUrl, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -316,32 +372,6 @@ export default async function handler(req: Request): Promise<Response> {
               'Prefer': 'resolution=merge-duplicates',
             },
             body: JSON.stringify(paymentData)
-          });
-          
-          if (!paymentResponse.ok) {
-            const error = await paymentResponse.text();
-            console.error('Error inserting payment:', error);
-            throw new Error(`Failed to insert payment record: ${error}`);
-          }
-          
-          const uuid = crypto.randomUUID();
-          
-          // Create or update payment record with valid user ID
-          await supabase.from(TABLES.PAYMENTS).upsert({
-            id: uuid,
-            user_id: userId,
-            stripe_payment_intent_id: paymentIntent.id,
-            amount: paymentIntent.amount || 0,
-            currency: paymentIntent.currency || 'usd',
-            status: paymentIntent.status || 'succeeded',
-            // Use the first payment method type if available, otherwise default to 'card'
-            payment_method: paymentIntent.payment_method || 
-                         (paymentIntent.payment_method_types && paymentIntent.payment_method_types[0]) || 
-                         'card',
-            created_at: paymentIntent.created 
-              ? new Date(paymentIntent.created * 1000).toISOString() 
-              : new Date().toISOString(),
-            updated_at: new Date().toISOString()
           });
           
           break;
@@ -356,9 +386,66 @@ export default async function handler(req: Request): Promise<Response> {
           }
           log(`Subscription ${eventType.split('.').pop()}:`, subscription.id);
           
-          // Prepare subscription data
-          const subscriptionData = {
+          // Get customer by stripe_customer_id
+          const customerUrl = `${SUPABASE_URL}/rest/v1/customers?stripe_customer_id=eq.${subscription.customer}&select=id,user_id`;
+          const customerResponse = await fetch(customerUrl, {
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            }
+          });
+          
+          const customerData = await customerResponse.json();
+          if (!customerResponse.ok || !customerData || customerData.length === 0) {
+            log('Customer not found for subscription:', subscription.customer);
+            throw new Error(`Customer not found for subscription: ${subscription.customer}`);
+          }
+          
+          const customer = customerData[0];
+          
+          // Determine plan type based on interval
+          const planType = subscription.plan?.interval === 'year' ? 'yearly' : 'monthly';
+          
+          // Prepare subscription data for customers table
+          const subscriptionUpdateData = {
+            subscription_status: subscription.status,
+            stripe_subscription_id: subscription.id,
+            plan_type: planType,
+            billing_interval: subscription.plan?.interval || 'month',
+            amount: subscription.plan?.amount || 0,
+            currency: subscription.plan?.currency || 'usd',
+            next_billing_date: new Date(subscription.current_period_end * 1000).toISOString(),
+            cancel_at_period_end: subscription.cancel_at_period_end || false,
+            subscription_start_date: subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : null,
+            subscription_end_date: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : null,
+            trial_start_date: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
+            trial_end_date: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+            updated_at: new Date().toISOString()
+          };
+          
+          // Update customer with subscription data
+          const customerUpdateUrl = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customer.id}`;
+          const customerUpdateResponse = await fetch(customerUpdateUrl, {
+            method: 'PATCH',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(subscriptionUpdateData)
+          });
+          
+          if (!customerUpdateResponse.ok) {
+            const error = await customerUpdateResponse.text();
+            console.error('Error updating customer subscription data:', error);
+            throw new Error(`Failed to update customer subscription data: ${error}`);
+          }
+          
+          // For backward compatibility, also update the subscriptions table
+          const legacySubscriptionData = {
             id: subscription.id,
+            user_id: customer.user_id,
             status: subscription.status,
             stripe_subscription_id: subscription.id,
             stripe_customer_id: subscription.customer,
@@ -379,9 +466,9 @@ export default async function handler(req: Request): Promise<Response> {
             canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null
           };
           
-          // Insert/update subscription using direct REST API
+          // Insert/update subscription using direct REST API (for backward compatibility)
           const subscriptionUrl = `${SUPABASE_URL}/rest/v1/subscriptions`;
-          const subscriptionResponse = await fetch(subscriptionUrl, {
+          await fetch(subscriptionUrl, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -389,14 +476,8 @@ export default async function handler(req: Request): Promise<Response> {
               'Content-Type': 'application/json',
               'Prefer': 'resolution=merge-duplicates',
             },
-            body: JSON.stringify(subscriptionData)
+            body: JSON.stringify(legacySubscriptionData)
           });
-          
-          if (!subscriptionResponse.ok) {
-            const error = await subscriptionResponse.text();
-            console.error('Error updating subscription:', error);
-            throw new Error(`Failed to update subscription record: ${error}`);
-          }
           
           break;
         }
@@ -409,29 +490,63 @@ export default async function handler(req: Request): Promise<Response> {
           }
           log(`Customer ${eventType.split('.').pop()}:`, customer.id);
           
+          // Check if the customer already exists
+          const checkCustomerUrl = `${SUPABASE_URL}/rest/v1/customers?stripe_customer_id=eq.${customer.id}&select=id`;
+          const checkResponse = await fetch(checkCustomerUrl, {
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            }
+          });
+          
+          const existingCustomer = await checkResponse.json();
+          const method = existingCustomer && existingCustomer.length > 0 ? 'PATCH' : 'POST';
+          const customerId = existingCustomer && existingCustomer.length > 0 ? existingCustomer[0].id : null;
+          
           // Prepare customer data
-          const customerData = {
-            id: generateUuid(),
+          const customerData: Record<string, any> = {
             stripe_customer_id: customer.id,
-            email: customer.email,
-            name: customer.name,
+            email: customer.email || 'no-email@example.com', // Ensure required field is set
+            name: customer.name || '',
             phone: customer.phone || null,
             address: customer.address ? JSON.stringify(customer.address) : null,
             default_payment_method: customer.invoice_settings?.default_payment_method || null,
             metadata: JSON.stringify(customer.metadata || {}),
-            created_at: customer.created ? new Date(customer.created * 1000).toISOString() : new Date().toISOString(),
+            // Set required fields with defaults if not provided
+            subscription_status: 'inactive',
+            plan_type: 'free',
+            billing_interval: 'month',
             updated_at: new Date().toISOString()
           };
           
+          // If it's a new customer, add created_at and ensure user_id is set
+          if (method === 'POST') {
+            customerData.created_at = customer.created 
+              ? new Date(customer.created * 1000).toISOString() 
+              : new Date().toISOString();
+            
+            // Ensure user_id is set (required field)
+            if (!customer.metadata?.user_id) {
+              // If no user_id in metadata, generate a new UUID
+              customerData.user_id = generateUuid();
+              log('Generated new user_id for customer:', customerData.user_id);
+            } else {
+              customerData.user_id = customer.metadata.user_id;
+            }
+          }
+          
           // Insert/update customer using direct REST API
-          const customerUrl = `${SUPABASE_URL}/rest/v1/customers`;
+          const customerUrl = method === 'PATCH' 
+            ? `${SUPABASE_URL}/rest/v1/customers?id=eq.${customerId}` 
+            : `${SUPABASE_URL}/rest/v1/customers`;
+            
           const customerResponse = await fetch(customerUrl, {
-            method: 'POST',
+            method: method,
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
               'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
               'Content-Type': 'application/json',
-              'Prefer': 'resolution=merge-duplicates',
+              'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal',
             },
             body: JSON.stringify(customerData)
           });
@@ -452,13 +567,84 @@ export default async function handler(req: Request): Promise<Response> {
           }
           log('Invoice payment succeeded:', invoice.id);
           
-          // Get user ID from invoice metadata or subscription
-          let userId = invoice.metadata?.user_id || '3db8cff7-e2b7-4900-a8c0-c7f7841e4c2d';
+          // Find the customer by subscription ID or customer ID
+          let customerQuery;
+          if (invoice.subscription) {
+            customerQuery = `stripe_subscription_id=eq.${invoice.subscription}`;
+          } else if (invoice.customer) {
+            customerQuery = `stripe_customer_id=eq.${invoice.customer}`;
+          } else {
+            throw new Error('No subscription or customer ID found in invoice');
+          }
           
-          // Create payment record for invoice using direct REST API
+          const customerUrl = `${SUPABASE_URL}/rest/v1/customers?${customerQuery}&select=id,user_id`;
+          const customerResponse = await fetch(customerUrl, {
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            }
+          });
+          
+          const customerData = await customerResponse.json();
+          if (!customerResponse.ok || !customerData || customerData.length === 0) {
+            log('Customer not found for invoice:', invoice.id);
+            throw new Error(`Customer not found for invoice: ${invoice.id}`);
+          }
+          
+          const customer = customerData[0];
+          
+          // Update customer with payment information
+          const customerUpdateData: Record<string, any> = {
+            last_payment_date: new Date().toISOString(),
+            last_payment_amount: invoice.amount_paid || 0,
+            last_payment_status: 'succeeded',
+            payment_method_type: invoice.payment_method_details?.type || 'card',
+            updated_at: new Date().toISOString()
+          };
+          
+          // If this is a subscription payment, update the subscription details
+          if (invoice.subscription) {
+            // Update next billing date
+            customerUpdateData.next_billing_date = invoice.lines?.data[0]?.period?.end 
+              ? new Date(invoice.lines.data[0].period.end * 1000).toISOString() 
+              : null;
+              
+            // If this is the first payment, update subscription status
+            if (invoice.billing_reason === 'subscription_create') {
+              customerUpdateData.subscription_status = 'active';
+              customerUpdateData.subscription_start_date = new Date().toISOString();
+              
+              // If there's a trial, set trial dates
+              if (invoice.lines?.data[0]?.period?.start && invoice.lines?.data[0]?.period?.end) {
+                customerUpdateData.trial_start_date = new Date(invoice.lines.data[0].period.start * 1000).toISOString();
+                customerUpdateData.trial_end_date = new Date(invoice.lines.data[0].period.end * 1000).toISOString();
+              }
+            }
+          }
+          
+          // Update customer with payment data
+          const customerUpdateUrl = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customer.id}`;
+          const customerUpdateResponse = await fetch(customerUpdateUrl, {
+            method: 'PATCH',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(customerUpdateData)
+          });
+          
+          if (!customerUpdateResponse.ok) {
+            const error = await customerUpdateResponse.text();
+            console.error('Error updating customer payment data:', error);
+            throw new Error(`Failed to update customer payment data: ${error}`);
+          }
+          
+          // For backward compatibility, also create a payment record
           const paymentData = {
             id: `inv_${invoice.id}`,
-            user_id: userId,
+            user_id: customer.user_id,
             subscription_id: invoice.subscription,
             payment_intent_id: invoice.payment_intent,
             stripe_payment_intent_id: invoice.payment_intent,
@@ -473,7 +659,7 @@ export default async function handler(req: Request): Promise<Response> {
           };
           
           const paymentUrl = `${SUPABASE_URL}/rest/v1/payments`;
-          const paymentResponse = await fetch(paymentUrl, {
+          await fetch(paymentUrl, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -483,12 +669,6 @@ export default async function handler(req: Request): Promise<Response> {
             },
             body: JSON.stringify(paymentData)
           });
-          
-          if (!paymentResponse.ok) {
-            const error = await paymentResponse.text();
-            console.error('Error recording invoice payment:', error);
-            throw new Error(`Failed to record invoice payment: ${error}`);
-          }
           
           break;
         }
@@ -500,13 +680,91 @@ export default async function handler(req: Request): Promise<Response> {
           }
           log('Invoice payment failed:', invoice.id);
           
-          // Get user ID from invoice metadata or subscription
-          let userId = invoice.metadata?.user_id || '3db8cff7-e2b7-4900-a8c0-c7f7841e4c2d';
+          // Find the customer by subscription ID or customer ID
+          let customerQuery;
+          if (invoice.subscription) {
+            customerQuery = `stripe_subscription_id=eq.${invoice.subscription}`;
+          } else if (invoice.customer) {
+            customerQuery = `stripe_customer_id=eq.${invoice.customer}`;
+          } else {
+            throw new Error('No subscription or customer ID found in invoice');
+          }
           
-          // Update payment record with failure using direct REST API
+          const customerUrl = `${SUPABASE_URL}/rest/v1/customers?${customerQuery}&select=id,user_id`;
+          const customerResponse = await fetch(customerUrl, {
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            }
+          });
+          
+          const customerData = await customerResponse.json();
+          if (!customerResponse.ok || !customerData || customerData.length === 0) {
+            log('Customer not found for invoice:', invoice.id);
+            throw new Error(`Customer not found for invoice: ${invoice.id}`);
+          }
+          
+          const customer = customerData[0];
+          
+          // Update customer with failed payment information
+          const customerUpdateData: Record<string, any> = {
+            last_payment_date: new Date().toISOString(),
+            last_payment_amount: invoice.amount_due || 0,
+            last_payment_status: 'failed',
+            payment_failure_reason: invoice.billing_reason || 'payment_failed',
+            updated_at: new Date().toISOString()
+          };
+          
+          // Handle subscription status based on billing reason
+          if (invoice.subscription) {
+            switch (invoice.billing_reason) {
+              case 'subscription_cycle':
+                customerUpdateData.subscription_status = 'past_due';
+                log('Marking subscription as past_due for subscription:', invoice.subscription);
+                break;
+                
+              case 'subscription_create':
+                // If this is the first payment attempt and it failed
+                customerUpdateData.subscription_status = 'incomplete';
+                log('Subscription creation payment failed, marking as incomplete:', invoice.subscription);
+                break;
+                
+              case 'subscription_update':
+                // Handle subscription update failures
+                customerUpdateData.subscription_status = 'past_due';
+                log('Subscription update payment failed, marking as past_due:', invoice.subscription);
+                break;
+            }
+            
+            // If there are retry attempts, log them
+            if (invoice.attempt_count > 1) {
+              log(`Payment failed attempt ${invoice.attempt_count} for subscription:`, invoice.subscription);
+            }
+          }
+          
+          // Update customer with payment failure data
+          const customerUpdateUrl = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customer.id}`;
+          const customerUpdateResponse = await fetch(customerUpdateUrl, {
+            method: 'PATCH',
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(customerUpdateData)
+          });
+          
+          if (!customerUpdateResponse.ok) {
+            const error = await customerUpdateResponse.text();
+            console.error('Error updating customer payment failure data:', error);
+            throw new Error(`Failed to update customer payment failure data: ${error}`);
+          }
+          
+          // For backward compatibility, also create a payment record
           const paymentData = {
             id: `inv_${invoice.id}`,
-            user_id: userId,
+            user_id: customer.user_id,
             subscription_id: invoice.subscription,
             payment_intent_id: invoice.payment_intent,
             stripe_payment_intent_id: invoice.payment_intent,
@@ -523,7 +781,7 @@ export default async function handler(req: Request): Promise<Response> {
           };
           
           const paymentUrl = `${SUPABASE_URL}/rest/v1/payments`;
-          const paymentResponse = await fetch(paymentUrl, {
+          await fetch(paymentUrl, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -533,12 +791,6 @@ export default async function handler(req: Request): Promise<Response> {
             },
             body: JSON.stringify(paymentData)
           });
-          
-          if (!paymentResponse.ok) {
-            const error = await paymentResponse.text();
-            console.error('Error recording failed payment:', error);
-            throw new Error(`Failed to record failed payment: ${error}`);
-          }
           
           break;
         }

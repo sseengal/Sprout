@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { useState, useEffect } from 'react';
 
 import { useLocalSearchParams } from 'expo-router';
 
@@ -135,15 +135,24 @@ export default function LoginScreen() {
           throw signUpError;
         }
         
+        // Set a flag to prevent automatic navigation away from auth screens during sign-up
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem('isSigningUp', 'true');
+        }
+        
         console.log('Sign up successful, user:', data?.email);
-        // Only redirect on successful signup
-        if (data?.email) {
+        // Always redirect on successful signup
+        console.log('Navigating to email confirmation screen with email:', email);
+        
+        // Force navigation to email confirmation screen
+        setTimeout(() => {
           router.replace({
-            pathname: '/email-confirmation',
+            pathname: '/(auth)/email-confirmation',
             params: { email: email },
           });
-          return;
-        }
+        }, 100);
+        
+        return;
       } else {
         console.log('Calling signInWithEmail...');
         const { data, error: signInError } = await signInWithEmail(email, password);
