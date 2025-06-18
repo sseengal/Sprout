@@ -36,33 +36,59 @@ export const AuthProvider = ({ children }) => {
     
     // Track if we're in the middle of an auth operation
     let isAuthInProgress = false;
+    let cleanupTimeout;
     
     // Check active sessions and sets the user
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const sessionId = session?.user?.id || 'no-session';
-      logger(`Auth state changed - Event: ${event}, Session ID: ${sessionId}`);
+      logger(`[Auth State Change] Event: ${event}, Session ID: ${sessionId}`, { event, session: !!session });
       
-      // Skip state updates during auth operations to prevent UI flicker
+      // Clear any pending cleanup
+      if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+        cleanupTimeout = null;
+      }
+      
+      // Handle different auth events
+      switch (event) {
+        case 'SIGNED_IN':
+        case 'TOKEN_REFRESHED':
+        case 'USER_UPDATED':
+          // These events should update the session
+          logger(`[${event}] Updating session for user:`, session?.user?.email);
+          setSession(session);
+          setUser(session?.user || null);
+          break;
+          
+        case 'SIGNED_OUT':
+          logger('[SIGNED_OUT] Clearing session');
+          setSession(null);
+          setUser(null);
+          break;
+          
+        case 'PASSWORD_RECOVERY':
+          logger('[PASSWORD_RECOVERY] Handling password recovery');
+          // Handle password recovery if needed
+          break;
+          
+        default:
+          logger(`[${event}] Unhandled auth event`);
+          break;
+      }
+      
+      // Always set loading to false after processing
+      if (loading) {
+        logger('Setting loading to false after auth state change');
+        setLoading(false);
+      }
+      
+      // Reset auth in progress flag after a short delay to ensure all state updates are processed
       if (isAuthInProgress) {
-        logger(`Skipping state update during auth operation: ${event}`);
-        return;
+        cleanupTimeout = setTimeout(() => {
+          isAuthInProgress = false;
+          logger('Reset isAuthInProgress flag');
+        }, 1000);
       }
-      
-      // Only update state for relevant auth events
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_OUT') {
-        logger(`Skipping state update for event: ${event}`);
-        return;
-      }
-      
-      // Only update state if we have a valid session
-      if (session) {
-        setSession(session);
-        setUser(session.user);
-      }
-      
-      // Always set loading to false after we've processed the auth state
-      logger('Auth state processed, setting loading to false');
-      setLoading(false);
     });
     
     // Store the original signIn and signUp functions
@@ -71,21 +97,33 @@ export const AuthProvider = ({ children }) => {
     
     // Wrap the signIn function to track auth operations
     supabase.auth.signInWithPassword = async (...args) => {
+      logger('Starting sign in with password');
       isAuthInProgress = true;
       try {
-        return await originalSignIn.apply(supabase.auth, args);
+        const result = await originalSignIn.apply(supabase.auth, args);
+        logger('Sign in with password completed', { error: result.error });
+        return result;
+      } catch (error) {
+        logger('Error in sign in with password:', error);
+        throw error;
       } finally {
-        isAuthInProgress = false;
+        // Don't reset isAuthInProgress here - let the auth state change handler handle it
       }
     };
     
     // Wrap the signUp function to track auth operations
     supabase.auth.signUp = async (...args) => {
+      logger('Starting sign up');
       isAuthInProgress = true;
       try {
-        return await originalSignUp.apply(supabase.auth, args);
+        const result = await originalSignUp.apply(supabase.auth, args);
+        logger('Sign up completed', { error: result.error });
+        return result;
+      } catch (error) {
+        logger('Error in sign up:', error);
+        throw error;
       } finally {
-        isAuthInProgress = false;
+        // Don't reset isAuthInProgress here - let the auth state change handler handle it
       }
     };
 
@@ -210,34 +248,48 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Customer records are now managed by the Stripe webhook
-  // The webhook handles creation and updates of customer records based on Stripe events
-
   // Sign in with email and password
   const signInWithEmail = async (email, password) => {
-    logger('Attempting to sign in with:', { email });
+    logger('[signInWithEmail] Attempting to sign in with:', { email });
     try {
       setLoading(true);
       setError(null);
-
-      logger('Calling supabase.auth.signInWithPassword...');
+      
+      logger('[signInWithEmail] Calling supabase.auth.signInWithPassword...');
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      logger('Sign in response:', { data, signInError });
+      logger('[signInWithEmail] Sign in response:', { 
+        hasUser: !!data?.user,
+        hasSession: !!data?.session,
+        error: signInError 
+      });
 
       if (signInError) {
-        logger('Sign in error:', signInError);
+        logger('[signInWithEmail] Sign in error:', signInError);
         throw signInError;
       }
 
-      // Customer record is managed by the webhook
-      logger('Sign in successful, user data:', data);
+      if (!data?.session) {
+        const error = new Error('No session returned from sign in');
+        logger('[signInWithEmail] Error:', error);
+        throw error;
+      }
+
+      logger('[signInWithEmail] Sign in successful, user data:', { 
+        userId: data.user?.id,
+        email: data.user?.email 
+      });
+      
+      // Explicitly update the session and user state
+      setSession(data.session);
+      setUser(data.user);
+      
       return { data, error: null };
     } catch (error) {
-      logger('Error in signInWithEmail:', {
+      logger('[signInWithEmail] Error:', {
         message: error.message,
         code: error.code,
         status: error.status,
@@ -247,12 +299,12 @@ export const AuthProvider = ({ children }) => {
       setError(errorMessage);
       return { data: null, error: new Error(errorMessage) };
     } finally {
-      logger('Sign in process completed');
+      logger('[signInWithEmail] Process completed');
       setLoading(false);
     }
   };
 
-  // Sign out with retry logic
+  // Sign out
   const signOut = async (retryCount = 0) => {
     const MAX_RETRIES = 2;
     const retryDelay = 1000; // 1 second
