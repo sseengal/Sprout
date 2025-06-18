@@ -139,49 +139,31 @@ export const AuthProvider = ({ children }) => {
         throw signUpError;
       }
 
-      // Step 2: Try client-side approach first (wait for session)
+      // Create customer record using server-side function
       if (data?.user?.id) {
         logger(`[SIGNUP] Auth user created successfully with ID: ${data.user.id}`);
-        logger('[SIGNUP] Waiting for session to be established...');
+        logger('[SIGNUP] Creating customer record...');
         
-        // Try client-side approach first (Option 1)
         try {
-          // Wait for up to 5 seconds for the session to be established
-          const maxAttempts = 10;
-          let attempts = 0;
-          let session = null;
+          const { data: customerData, error: customerError } = await supabase.rpc('handle_new_customer', { 
+            p_user_id: data.user.id 
+          });
           
-          while (attempts < maxAttempts && !session) {
-            attempts++;
-            logger(`[SIGNUP] Checking for session (attempt ${attempts}/${maxAttempts})...`);
-            
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError) {
-              logger('[SIGNUP] Error checking session:', sessionError);
-            } else if (sessionData?.session) {
-              session = sessionData.session;
-              logger('[SIGNUP] Session established successfully!');
-              break;
-            }
-            
-            // Wait 500ms before next attempt
-            await new Promise(resolve => setTimeout(resolve, 500));
+          if (customerError) {
+            logger('[SIGNUP] Customer creation failed:', {
+              message: customerError.message,
+              code: customerError.code,
+              details: customerError.details,
+              hint: customerError.hint
+            });
+            throw customerError;
           }
           
-          if (!session) {
-            throw new Error('Failed to establish session after multiple attempts');
+          if (!customerData) {
+            throw new Error('No data returned from customer creation');
           }
           
-          // Now that we have a session, try creating the customer record
-          logger('[SIGNUP] Session established, creating customer record...');
-          const customerRecord = await ensureCustomerRecord(data.user.id, email, true);
-          
-          if (!customerRecord) {
-            throw new Error('Failed to create customer record after session was established');
-          }
-          
-          logger(`[SIGNUP] Customer record created successfully with ID: ${customerRecord.id}`);
+          logger('[SIGNUP] Customer record created successfully:', customerData);
           return { 
             data: { 
               email: email,
@@ -190,61 +172,22 @@ export const AuthProvider = ({ children }) => {
             error: null 
           };
           
-        } catch (clientSideError) {
-          logger('[SIGNUP] Client-side approach failed, falling back to server-side function', {
-            error: clientSideError.message
-          });
+        } catch (error) {
+          logger('[SIGNUP] Error creating customer record:', error);
           
-          // Fall back to server-side function (Option 2)
+          // Clean up auth user if customer creation fails
           try {
-            logger('[SIGNUP] Attempting server-side customer record creation...');
-            const { data: serverData, error: serverError } = await supabase.rpc('handle_new_customer', { p_user_id: data.user.id });
-            
-            if (serverError) {
-              logger('[SIGNUP] Server-side customer creation failed:', {
-                message: serverError.message,
-                code: serverError.code,
-                details: serverError.details,
-                hint: serverError.hint
-              });
-              throw serverError;
-            }
-            
-            if (!serverData) {
-              const errorMsg = 'No data returned from server-side customer creation';
-              logger(`[SIGNUP] ${errorMsg}`);
-              throw new Error(errorMsg);
-            }
-            
-            logger('[SIGNUP] Server-side customer creation successful:', serverData);
-            return { 
-              data: { 
-                email: email,
-                userId: data.user.id
-              }, 
-              error: null 
-            };
-            
-          } catch (serverSideError) {
-            logger('[SIGNUP] Server-side approach also failed:', {
-              error: serverSideError.message,
-              stack: serverSideError.stack
+            logger('[SIGNUP] Cleaning up auth user due to customer record creation failure');
+            await supabase.auth.admin.deleteUser(data.user.id);
+            logger('[SIGNUP] Successfully cleaned up auth user');
+          } catch (cleanupError) {
+            logger('[SIGNUP] Error during cleanup of auth user:', {
+              message: cleanupError.message,
+              code: cleanupError.code
             });
-            
-            // If both approaches fail, clean up the auth user
-            try {
-              logger('[SIGNUP] Cleaning up auth user due to customer record creation failure');
-              await supabase.auth.admin.deleteUser(data.user.id);
-              logger('[SIGNUP] Successfully cleaned up auth user');
-            } catch (cleanupError) {
-              logger('[SIGNUP] Error during cleanup of auth user:', {
-                message: cleanupError.message,
-                code: cleanupError.code
-              });
-            }
-            
-            throw new Error('Failed to complete signup. Please try again.');
           }
+          
+          throw new Error('Failed to complete signup. Please try again.');
         }
       } else {
         const errorMsg = 'No user ID available in signup response';
@@ -267,119 +210,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Helper function to ensure a customer record exists for the user
-  const ensureCustomerRecord = async (userId, email, isNewUser = false) => {
-    try {
-      logger(`[CUSTOMER RECORD] Starting ensureCustomerRecord for user: ${userId}, isNewUser: ${isNewUser}`);
-      
-      // For new users, call the server-side function that bypasses RLS
-      if (isNewUser) {
-        logger('[CUSTOMER RECORD] New user signup - using server-side customer creation');
-        
-        logger(`[CUSTOMER RECORD] Calling handle_new_customer for user: ${userId}`);
-        const { data, error } = await supabase.rpc('handle_new_customer', { p_user_id: userId });
-        
-        if (error) {
-          logger('[CUSTOMER RECORD] Error in server-side customer creation:', {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint
-          });
-          throw error;
-        }
-        
-        if (!data) {
-          const errorMsg = 'No data returned from server-side customer creation';
-          throw new Error(errorMsg);
-        }
-        
-        logger(`[CUSTOMER RECORD] Customer record created/updated successfully:`, data);
-        
-        logger('[CUSTOMER RECORD] Server-side customer creation successful:', data);
-        return data;
-      }
-      
-      // For non-new users, check if customer record exists
-      logger(`[CUSTOMER RECORD] Checking for existing customer record for user: ${userId}`);
-      const { data: existingCustomer, error: fetchError } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (fetchError) {
-        logger('[CUSTOMER RECORD] Error fetching customer record:', fetchError);
-        throw fetchError;
-      }
-      
-      // If no customer record exists for existing user, create one
-      if (!existingCustomer) {
-        logger('[CUSTOMER RECORD] No customer record found for existing user, creating one');
-        
-        const { data: newCustomer, error: createError } = await supabase
-          .from('customers')
-          .insert({
-            user_id: userId,
-            email: email,
-            name: email.split('@')[0],
-            subscription_status: 'inactive',
-            plan_type: 'free',
-            billing_interval: 'month',
-            phone: '',
-            address: {},
-            metadata: {},
-            cancel_at_period_end: false
-          })
-          .select()
-          .single();
-          
-        if (createError) {
-          logger('[CUSTOMER RECORD] Error creating customer record:', createError);
-          throw createError;
-        }
-        
-        if (!newCustomer) {
-          const errorMsg = 'No data returned after customer record creation';
-          logger(`[CUSTOMER RECORD] ${errorMsg}`);
-          throw new Error(errorMsg);
-        }
-        
-        logger('[CUSTOMER RECORD] Created new customer record:', newCustomer);
-        return newCustomer;
-      }
-      
-      // If customer exists and this is a login (not a new signup), update the record
-      if (!isNewUser) {
-        logger('[CUSTOMER RECORD] Updating existing customer record for user:', userId);
-        
-        // Only update email and updated_at timestamp on login
-        const updateData = {
-          email: email, // Ensure email is up to date
-          updated_at: new Date().toISOString()
-        };
-        
-        const { error: updateError } = await supabase
-          .from('customers')
-          .update(updateData)
-          .eq('user_id', userId);
-
-        if (updateError) {
-          logger('[CUSTOMER RECORD] Error updating customer record:', updateError);
-          // Log but don't throw to avoid disrupting the login flow
-        } else {
-          logger('[CUSTOMER RECORD] Updated customer record successfully');
-        }
-      }
-      
-      // If we get here, the customer record exists
-      logger('[CUSTOMER RECORD] Using existing customer record:', existingCustomer);
-      return existingCustomer;
-    } catch (error) {
-      logger('[CUSTOMER RECORD] Exception in ensureCustomerRecord:', error);
-      throw error;
-    }
-  };
+  // Customer records are now managed by the Stripe webhook
+  // The webhook handles creation and updates of customer records based on Stripe events
 
   // Sign in with email and password
   const signInWithEmail = async (email, password) => {
@@ -401,16 +233,7 @@ export const AuthProvider = ({ children }) => {
         throw signInError;
       }
 
-      // Ensure customer record exists after successful sign-in
-      // Pass isNewUser=false to indicate this is a login, not a new signup
-      if (data?.user?.id) {
-        logger('Ensuring customer record exists for user:', data.user.id);
-        const customerRecord = await ensureCustomerRecord(data.user.id, email, false);
-        logger('Customer record status:', customerRecord ? 'Found/Updated' : 'Failed to verify');
-      } else {
-        logger('Warning: No user ID available after sign in');
-      }
-
+      // Customer record is managed by the webhook
       logger('Sign in successful, user data:', data);
       return { data, error: null };
     } catch (error) {

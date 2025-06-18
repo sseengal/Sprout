@@ -1,12 +1,7 @@
-import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { View, ActivityIndicator } from 'react-native';
+import { Tabs } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { useEffect } from 'react';
-import { router } from 'expo-router';
-import MyPlantsScreen from './My plants';
-import CameraScreen from './camera';
-import ProfileScreen from './profile';
 
 function ProtectedTabs() {
   const { user, loading } = useAuth();
