@@ -201,11 +201,19 @@ export const AuthProvider = ({ children }) => {
             const { data: serverData, error: serverError } = await supabase.rpc('handle_new_customer', { p_user_id: data.user.id });
             
             if (serverError) {
+              logger('[SIGNUP] Server-side customer creation failed:', {
+                message: serverError.message,
+                code: serverError.code,
+                details: serverError.details,
+                hint: serverError.hint
+              });
               throw serverError;
             }
             
             if (!serverData) {
-              throw new Error('No data returned from server-side customer creation');
+              const errorMsg = 'No data returned from server-side customer creation';
+              logger(`[SIGNUP] ${errorMsg}`);
+              throw new Error(errorMsg);
             }
             
             logger('[SIGNUP] Server-side customer creation successful:', serverData);
@@ -268,18 +276,25 @@ export const AuthProvider = ({ children }) => {
       if (isNewUser) {
         logger('[CUSTOMER RECORD] New user signup - using server-side customer creation');
         
+        logger(`[CUSTOMER RECORD] Calling handle_new_customer for user: ${userId}`);
         const { data, error } = await supabase.rpc('handle_new_customer', { p_user_id: userId });
         
         if (error) {
-          logger('[CUSTOMER RECORD] Error in server-side customer creation:', error);
+          logger('[CUSTOMER RECORD] Error in server-side customer creation:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+          });
           throw error;
         }
         
         if (!data) {
           const errorMsg = 'No data returned from server-side customer creation';
-          logger(`[CUSTOMER RECORD] ${errorMsg}`);
           throw new Error(errorMsg);
         }
+        
+        logger(`[CUSTOMER RECORD] Customer record created/updated successfully:`, data);
         
         logger('[CUSTOMER RECORD] Server-side customer creation successful:', data);
         return data;
