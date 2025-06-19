@@ -127,19 +127,40 @@ async function handleSubscriptionEvent(subscription: any) {
   }
   const planType = subscription.plan?.interval === 'year' ? 'yearly' : 'monthly';
 
-  // Prepare subscription update
-  const updateData = {
+  // Prepare subscription update with safe date handling
+  const updateData: Record<string, any> = {
     subscription_status: subscription.status,
     stripe_subscription_id: subscription.id,
     plan_type: planType,
     billing_interval: subscription.plan?.interval || 'month',
-    next_billing_date: new Date(subscription.current_period_end * 1000).toISOString(),
     cancel_at_period_end: subscription.cancel_at_period_end || false,
-    subscription_start_date: subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : null,
-    subscription_end_date: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : null,
-    trial_start_date: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
-    trial_end_date: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null
   };
+
+  // Helper function to safely convert Stripe timestamps to ISO strings
+  const safeDate = (timestamp: number | null | undefined): string | null => {
+    return timestamp ? new Date(timestamp * 1000).toISOString() : null;
+  };
+
+  // Only add date fields if they exist
+  if (subscription.current_period_end) {
+    updateData.next_billing_date = safeDate(subscription.current_period_end);
+  }
+  
+  if (subscription.start_date) {
+    updateData.subscription_start_date = safeDate(subscription.start_date);
+  }
+  
+  if (subscription.ended_at) {
+    updateData.subscription_end_date = safeDate(subscription.ended_at);
+  }
+  
+  if (subscription.trial_start) {
+    updateData.trial_start_date = safeDate(subscription.trial_start);
+  }
+  
+  if (subscription.trial_end) {
+    updateData.trial_end_date = safeDate(subscription.trial_end);
+  }
 
   await updateCustomer(customerId, updateData);
   log(`Updated subscription ${subscription.id} for customer ${customerId}`, updateData);
@@ -222,7 +243,8 @@ async function handleInvoiceEvent(invoice: any) {
     if (!customerId) {
       throw new Error('Customer not found for invoice');
     }
-    const isPaid = invoice.paid && invoice.status === 'paid';
+    // More flexible check for successful payments
+    const isPaid = invoice.paid || invoice.status === 'paid' || invoice.status === 'succeeded';
     const isFailed = !isPaid && invoice.attempted && !invoice.paid;
 
     // Prepare payment update
@@ -232,6 +254,15 @@ async function handleInvoiceEvent(invoice: any) {
       last_payment_status: isPaid ? 'succeeded' : 'failed',
       payment_method_type: invoice.payment_intent?.payment_method_types?.[0] || 'card'
     };
+
+    // Log payment status for debugging
+    log('Payment status:', { 
+      invoiceId: invoice.id, 
+      paid: invoice.paid, 
+      status: invoice.status, 
+      isPaid, 
+      isFailed 
+    });
 
     // Handle subscription-specific updates
     if (invoice.subscription) {

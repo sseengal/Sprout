@@ -31,6 +31,7 @@
 | name | text | YES | - | Customer name |
 | phone | text | YES | - | Customer phone |
 | subscription_status | text | NO | 'inactive' | Status of subscription |
+| stripe_subscription_id | text | YES | - | Stripe subscription ID |
 | default_payment_method | text | YES | - | Default payment method ID |
 | plan_type | text | NO | - | Type of plan |
 | billing_interval | text | NO | - | Billing interval |
@@ -102,6 +103,7 @@ On conflict (user_id), it updates:
 ### Webhook-Only Fields
 These fields should only be updated by Stripe webhooks:
 - `stripe_customer_id`
+- `stripe_subscription_id`
 - `subscription_status` (after initial 'inactive')
 - `plan_type` (after initial 'monthly')
 - `billing_interval` (after initial 'month')
