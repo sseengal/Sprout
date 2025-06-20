@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -10,6 +10,7 @@ export default function ProfileScreen() {
   const { user, signOut, loading: authLoading } = useAuth();
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [isUnsubscribing, setIsUnsubscribing] = useState(false);
   const [error, setError] = useState(null);
   
   // Fetch subscription data
@@ -47,6 +48,36 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('Error signing out:', error);
     }
+  };
+
+  const handleUnsubscribe = () => {
+    Alert.alert(
+      'Confirm Unsubscription',
+      'Your subscription will remain active until the end of your current billing period. You will not be charged again after this period.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Unsubscribe',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsUnsubscribing(true);
+              // TODO: Implement actual unsubscribe API call
+              console.log('Unsubscribing...');
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (err) {
+              console.error('Error unsubscribing:', err);
+              Alert.alert('Error', 'Failed to process unsubscription. Please try again.');
+            } finally {
+              setIsUnsubscribing(false);
+            }
+          },
+        },
+      ]
+    );
   };
   
   const formatDate = (dateString) => {
@@ -183,14 +214,21 @@ export default function ProfileScreen() {
                 </View>
               ) : subscription?.subscription_status === 'active' && (
                 <TouchableOpacity 
-                  onPress={() => console.log('Unsubscribe clicked')}
+                  onPress={handleUnsubscribe}
+                  disabled={isUnsubscribing}
                 >
-                  <Text style={styles.unsubscribeLink}>Unsubscribe</Text>
+                  {isUnsubscribing ? (
+                    <ActivityIndicator size="small" color="#F44336" />
+                  ) : (
+                    <Text style={styles.unsubscribeLink}>Unsubscribe</Text>
+                  )}
                 </TouchableOpacity>
               )}
             </>
           )}
         </View>
+        
+
         
         <View style={styles.menu}>
           <TouchableOpacity 
