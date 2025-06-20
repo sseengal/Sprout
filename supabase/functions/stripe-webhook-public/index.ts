@@ -141,9 +141,16 @@ async function handleSubscriptionEvent(subscription: any) {
     return timestamp ? new Date(timestamp * 1000).toISOString() : null;
   };
 
-  // Only add date fields if they exist
+  // Handle next_billing_date - use current_period_end from subscription
   if (subscription.current_period_end) {
-    updateData.next_billing_date = safeDate(subscription.current_period_end);
+    const nextBillingDate = safeDate(subscription.current_period_end);
+    updateData.next_billing_date = nextBillingDate;
+    log(`Updating next_billing_date from subscription.current_period_end: ${nextBillingDate}`);
+  } else {
+    log('No current_period_end found in subscription, skipping next_billing_date update', {
+      subscription_id: subscription.id,
+      status: subscription.status
+    });
   }
   
   if (subscription.start_date) {
@@ -266,10 +273,12 @@ async function handleInvoiceEvent(invoice: any) {
 
     // Handle subscription-specific updates
     if (invoice.subscription) {
-      // Convert Stripe timestamp to ISO string
-      updateData.next_billing_date = invoice.lines?.data?.[0]?.period?.end 
-        ? new Date(invoice.lines.data[0].period.end * 1000).toISOString()
-        : null;
+      // Don't update next_billing_date here - it should come from subscription events
+      // to avoid race conditions and ensure consistency
+      log('Skipping next_billing_date update from invoice event - should be handled by subscription events', {
+        invoice_id: invoice.id,
+        subscription_id: invoice.subscription
+      });
 
       // Handle first payment
       if (invoice.billing_reason === 'subscription_create' && isPaid) {
