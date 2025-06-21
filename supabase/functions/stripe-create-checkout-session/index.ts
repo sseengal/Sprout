@@ -30,6 +30,54 @@ serve(async (req) => {
     if (!user_id || !user_email || !plan_id || !amount) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
     }
+    
+    // Check if user is eligible for a free trial
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    
+    if (!supabaseUrl || !supabaseKey || !stripeKey) {
+      throw new Error('Missing required environment variables');
+    }
+    
+    // Check if user has an active subscription or has used a trial before
+    const trialCheckUrl = `${supabaseUrl}/rest/v1/customers?email=eq.${encodeURIComponent(user_email)}&select=id,subscription_status,trial_start_date`;
+    const trialCheck = await fetch(trialCheckUrl, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!trialCheck.ok) {
+      const error = await trialCheck.text();
+      throw new Error(`Failed to check trial eligibility: ${error}`);
+    }
+    
+    const [customerData] = await trialCheck.json();
+    
+    // Check various subscription states
+    const hasActiveSubscription = customerData?.subscription_status === 'active';
+    const isInTrial = customerData?.subscription_status === 'trialing';
+    const hasUsedTrialBefore = !!customerData?.trial_start_date;
+    
+    // A user is eligible for a trial if:
+    // 1. They don't have an active subscription AND
+    // 2. They're not currently in a trial AND
+    // 3. They've never started a trial before
+    const isEligibleForTrial = !hasActiveSubscription && 
+                              !isInTrial && 
+                              !hasUsedTrialBefore;
+    
+    log('Trial eligibility check', {
+      user_email,
+      hasActiveSubscription,
+      isInTrial,
+      hasUsedTrialBefore,
+      isEligibleForTrial,
+      currentStatus: customerData?.subscription_status || 'unknown'
+    });
     // 1. Create or fetch Stripe customer
     let customer;
     try {
@@ -227,32 +275,110 @@ serve(async (req) => {
       console.error('[Stripe] create_price error:', err);
       return new Response(JSON.stringify({ error: 'Stripe create_price error', details: String(err) }), { status: 500, headers: corsHeaders });
     }
-    // 4. Create payment link
-    let paymentLink;
+    // 4. Create checkout session with trial if eligible
+    let session;
     try {
-      // Stripe: Create payment link
-      const paymentLinkParams = new URLSearchParams({
-        'line_items[0][price]': price.id,
-        'line_items[0][quantity]': '1',
+      let sessionParams: Record<string, any> = {
+        customer: customer.id,
+        payment_method_types: ['card'],
+        line_items: [{
+          price: price.id,
+          quantity: 1,
+        }],
+        mode: 'subscription',
+        success_url: `${Deno.env.get('APP_URL')}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${Deno.env.get('APP_URL')}/payment/cancel`,
+        metadata: {
+          user_id,
+          plan_id,
+          is_trial: isEligibleForTrial ? 'true' : 'false'
+        },
+        subscription_data: {
+          metadata: {
+            user_id,
+            plan_id,
+            is_trial: isEligibleForTrial ? 'true' : 'false'
+          },
+          // Only set trial period if eligible
+          ...(isEligibleForTrial && {
+            trial_period_days: 14,
+            trial_settings: {
+              end_behavior: {
+                missing_payment_method: 'cancel'
+              }
+            }
+          })
+        },
+        payment_method_collection: isEligibleForTrial ? 'if_required' : 'always',
+        allow_promotion_codes: true,
+      };
+
+      log('Creating Stripe checkout session', {
+        customerId: customer.id,
+        priceId: price.id,
+        isEligibleForTrial,
+        trialDays: isEligibleForTrial ? 14 : 0,
+        sessionParams: {
+          ...sessionParams,
+          // Don't log the entire customer object
+          customer: '***REDACTED***',
+          line_items: sessionParams.line_items.map((item: any) => ({
+            ...item,
+            // Don't log the entire price object
+            price: item.price ? '***REDACTED***' : null
+          }))
+        }
       });
-      const paymentLinkResp = await fetch('https://api.stripe.com/v1/payment_links', {
+
+      const sessionResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${Deno.env.get('STRIPE_SECRET_KEY')}`,
+          'Authorization': `Bearer ${stripeKey}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: paymentLinkParams
+        body: new URLSearchParams(
+          Object.entries(sessionParams).reduce((acc, [key, value]) => {
+            if (typeof value === 'object' && value !== null) {
+              // Handle nested objects like line_items and subscription_data
+              Object.entries(value).forEach(([subKey, subValue]) => {
+                if (typeof subValue === 'object' && subValue !== null) {
+                  // Handle deeply nested objects like subscription_data.metadata
+                  Object.entries(subValue).forEach(([subSubKey, subSubValue]) => {
+                    acc[`${key}[${subKey}][${subSubKey}]`] = String(subSubValue);
+                  });
+                } else {
+                  acc[`${key}[${subKey}]`] = String(subValue);
+                }
+              });
+            } else {
+              acc[key] = String(value);
+            }
+            return acc;
+          }, {} as Record<string, string>)
+        )
       });
-      paymentLink = await paymentLinkResp.json();
-      if (!paymentLink || !paymentLink.url) {
-        console.error('[Stripe] create_payment_link API error:', paymentLink);
-        throw new Error(paymentLink.error?.message || 'Failed to create Stripe payment link');
+
+      session = await sessionResponse.json();
+      
+      if (!session || !session.url) {
+        console.error('[Stripe] create_checkout_session API error:', session);
+        throw new Error(session.error?.message || 'Failed to create Stripe checkout session');
       }
     } catch (err) {
       console.error('[Stripe] create_payment_link error:', err);
       return new Response(JSON.stringify({ error: 'Stripe create_payment_link error', details: String(err) }), { status: 500, headers: corsHeaders });
     }
-    return new Response(JSON.stringify({ url: paymentLink.url }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ 
+      url: session.url,
+      isTrial: isEligibleForTrial,
+      trialDays: isEligibleForTrial ? 14 : 0
+    }), { 
+      status: 200, 
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      } 
+    });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message || 'Internal error', details: String(err) }), { status: 500, headers: corsHeaders });
   }
