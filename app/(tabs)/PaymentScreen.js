@@ -1,19 +1,19 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-  Alert,
-  Dimensions
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
 import { createStripeCheckoutSession } from '../../lib/stripe';
+import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 const CARD_MARGIN = 16;
@@ -23,8 +23,8 @@ const CARD_WIDTH = width - (CARD_MARGIN * 3);
 const PLANS = {
   monthly: {
     id: 'price_monthly',
-    name: 'Monthly Plan',
-    amount: 9900, // ₹99.00 in paise
+    name: 'Monthly',
+    amount: 10000, // ₹100.00 in paise
     currency: 'inr',
     interval: 'month',
     features: [
@@ -35,9 +35,8 @@ const PLANS = {
   },
   yearly: {
     id: 'price_yearly',
-    name: 'Yearly Plan',
-    amount: 94900, // ₹949.00 in paise (discounted price)
-    originalAmount: 118800, // ₹1,188.00 in paise (original price - ₹99 * 12)
+    name: 'Yearly',
+    amount: 96000, // ₹960.00 in paise (20% off)
     currency: 'inr',
     interval: 'year',
     features: [
@@ -138,22 +137,13 @@ export default function PaymentScreen() {
           </View>
         )}
         <Text style={styles.planName}>{plan.name}</Text>
-        <View>
-          <View style={styles.priceRow}>
-            <Text style={styles.planPrice}>
-              {formatPrice(plan.amount)}
-              <Text style={styles.planInterval}>/{plan.interval}</Text>
-            </Text>
-            {isYearly && (
-              <Text style={[styles.originalPrice, { marginLeft: 16 }]}>
-                {formatPrice(plan.originalAmount)}
-              </Text>
-            )}
-          </View>
-          {isYearly && (
-            <Text style={[styles.discountText, { marginTop: 4 }]}>Save 20% vs monthly</Text>
-          )}
-        </View>
+        <Text style={styles.planPrice}>
+          {formatPrice(plan.amount)}
+          <Text style={styles.planInterval}>/{plan.interval}</Text>
+        </Text>
+        {isYearly && (
+          <Text style={styles.discountText}>Save 20% vs monthly</Text>
+        )}
         <View style={styles.featuresContainer}>
           {plan.features.map((feature, index) => (
             <View key={index} style={styles.featureItem}>
@@ -202,23 +192,6 @@ export default function PaymentScreen() {
 }
 
 const styles = StyleSheet.create({
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 4,
-  },
-  originalPriceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  originalPrice: {
-    fontSize: 20,
-    color: '#6b7280',
-    textDecorationLine: 'line-through',
-    marginLeft: 16,
-    marginBottom: 2,
-  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -294,9 +267,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '800',
     color: '#0f172a',
-  },
-  trialPrice: {
-    color: '#10b981',
+    marginBottom: 4,
   },
   planInterval: {
     fontSize: 16,

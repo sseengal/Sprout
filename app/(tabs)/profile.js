@@ -105,8 +105,26 @@ export default function ProfileScreen() {
     }
   };
   
-  const getStatusText = (status) => {
-    return status ? status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ') : 'Inactive';
+  const getTrialDaysRemaining = (trialEndDate) => {
+    if (!trialEndDate) return 0;
+    const end = new Date(trialEndDate).getTime();
+    const now = new Date().getTime();
+    return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+  };
+
+  const getStatusText = (status, trialEndDate) => {
+    if (!status) return 'Inactive';
+    
+    // Format the status text
+    let statusText = status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
+    
+    // Add trial days remaining if in trial
+    if (status === 'trialing' && trialEndDate) {
+      const daysLeft = getTrialDaysRemaining(trialEndDate);
+      statusText += ` - ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+    }
+    
+    return statusText;
   };
   
   if (authLoading) {
@@ -173,7 +191,7 @@ export default function ProfileScreen() {
                     styles.statusText,
                     { color: getStatusColor(subscription?.subscription_status) }
                   ]}>
-                    {getStatusText(subscription?.subscription_status)}
+                    {getStatusText(subscription?.subscription_status, subscription?.trial_end_date)}
                   </Text>
                 </View>
               </View>

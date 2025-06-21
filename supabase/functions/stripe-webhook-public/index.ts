@@ -25,64 +25,120 @@ const corsHeaders = {
   'Content-Type': 'application/json'
 };
 
-// Simple logger
-function log(message: string, data?: any) {
+// Enhanced logger with structured logging
+function log(message: string, data: Record<string, any> = {}) {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data || '');
+  const logEntry = {
+    timestamp,
+    message,
+    ...data,
+    // Add any additional context here
+  };
+  console.log(JSON.stringify(logEntry, null, 2));
 }
 
-// Helper to find customer by email
+// Helper to find customer by email with enhanced logging
 async function findCustomerByEmail(email: string) {
-  const url = `${SUPABASE_URL}/rest/v1/customers?email=eq.${encodeURIComponent(email)}&select=*`;
-  const response = await fetch(url, {
-    headers: {
-      'apikey': SUPABASE_SERVICE_ROLE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/customers?email=eq.${encodeURIComponent(email)}&select=*`;
+    log('Looking up customer by email', { email, url });
+    
+    const response = await fetch(url, {
+      headers: {
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      log('Error finding customer by email', { email, error: errorText });
+      throw new Error(`Failed to find customer by email: ${errorText}`);
     }
-  });
 
-  if (!response.ok) {
-    throw new Error(`Failed to find customer by email: ${await response.text()}`);
+    const customers = await response.json();
+    const customer = customers?.[0] || null;
+    log('Customer lookup result', { email, found: !!customer });
+    return customer;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log('Error in findCustomerByEmail', { 
+      email, 
+      error: errorMessage,
+      errorType: error?.constructor?.name || typeof error
+    });
+    throw error;
   }
-
-  const customers = await response.json();
-  return customers?.[0] || null;
 }
 
-// Helper to update customer record in Supabase
+// Helper to update customer record in Supabase with enhanced logging
 async function updateCustomer(customerId: string, updateData: Record<string, any>) {
-  const url = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customerId}`;
-  const response = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_SERVICE_ROLE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    },
-    body: JSON.stringify({
-      ...updateData,
-      updated_at: new Date().toISOString()
-    })
-  });
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/customers?id=eq.${customerId}`;
+    log('Updating customer record', { customerId, updateData });
+    
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to update customer: ${error}`);
+    if (!response.ok) {
+      const error = await response.text();
+      log('Failed to update customer', { customerId, error });
+      throw new Error(`Failed to update customer: ${error}`);
+    }
+    
+    log('Successfully updated customer', { customerId });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log('Error in updateCustomer', { 
+      customerId, 
+      error: errorMessage,
+      errorType: error?.constructor?.name || typeof error
+    });
+    throw error;
   }
 }
 
-// Handle subscription events
+// Handle subscription events with enhanced logging and error handling
 async function handleSubscriptionEvent(subscription: any) {
+  log('Processing subscription event', { 
+    subscription_id: subscription.id,
+    status: subscription.status,
+    customer: subscription.customer,
+    customer_email: subscription.customer_email
+  });
+
   let customer;
   let customerId: string | null = null;
   
   // Try to get customer by email first
   if (subscription.customer_email) {
-    customer = await findCustomerByEmail(subscription.customer_email);
-    if (customer) {
-      customerId = customer.id.toString(); // Ensure customerId is a string
-      log(`Found customer by email: ${subscription.customer_email}`, { customerId });
+    try {
+      customer = await findCustomerByEmail(subscription.customer_email);
+      if (customer) {
+        customerId = customer.id.toString();
+        log('Found customer by email', { 
+          email: subscription.customer_email, 
+          customerId 
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log('Error finding customer by email', { 
+        email: subscription.customer_email, 
+        error: errorMessage,
+        errorType: error?.constructor?.name || typeof error
+      });
     }
   }
   
@@ -136,6 +192,15 @@ async function handleSubscriptionEvent(subscription: any) {
     cancel_at_period_end: subscription.cancel_at_period_end || false,
   };
 
+  // Handle trial status
+  if (subscription.status === 'trialing') {
+    updateData.subscription_status = 'trialing';
+    log('Subscription is in trial period', { 
+      trial_start: subscription.trial_start,
+      trial_end: subscription.trial_end 
+    });
+  }
+
   // Helper function to safely convert Stripe timestamps to ISO strings
   const safeDate = (timestamp: number | null | undefined): string | null => {
     return timestamp ? new Date(timestamp * 1000).toISOString() : null;
@@ -161,12 +226,22 @@ async function handleSubscriptionEvent(subscription: any) {
     updateData.subscription_end_date = safeDate(subscription.ended_at);
   }
   
+  // Handle trial dates
   if (subscription.trial_start) {
     updateData.trial_start_date = safeDate(subscription.trial_start);
+    log('Set trial start date', { date: updateData.trial_start_date });
   }
   
   if (subscription.trial_end) {
     updateData.trial_end_date = safeDate(subscription.trial_end);
+    log('Set trial end date', { date: updateData.trial_end_date });
+    
+    // If trial ended and subscription is active, update status
+    const trialEnd = new Date(subscription.trial_end * 1000);
+    if (trialEnd <= new Date() && subscription.status === 'active') {
+      updateData.subscription_status = 'active';
+      log('Trial period ended, marking subscription as active');
+    }
   }
 
   await updateCustomer(customerId, updateData);
@@ -175,6 +250,11 @@ async function handleSubscriptionEvent(subscription: any) {
 
 // Handle invoice payment events
 async function handleInvoiceEvent(invoice: any) {
+  // Skip if this is a zero-amount invoice (common for trials)
+  if (invoice.amount_due === 0 && invoice.amount_paid === 0) {
+    log('Skipping zero-amount invoice', { invoice_id: invoice.id });
+    return;
+  }
   try {
     log(`Processing invoice ${invoice.id}`, { 
       status: invoice.status,
@@ -273,6 +353,15 @@ async function handleInvoiceEvent(invoice: any) {
 
     // Handle subscription-specific updates
     if (invoice.subscription) {
+      // Check if this is the first payment after trial
+      if (invoice.billing_reason === 'subscription_cycle' && 
+          invoice.subscription_details?.metadata?.was_trial) {
+        updateData.subscription_status = 'active';
+        log('Trial period ended, subscription now active', { 
+          invoice_id: invoice.id,
+          subscription_id: invoice.subscription 
+        });
+      }
       // Don't update next_billing_date here - it should come from subscription events
       // to avoid race conditions and ensure consistency
       log('Skipping next_billing_date update from invoice event - should be handled by subscription events', {
@@ -282,10 +371,20 @@ async function handleInvoiceEvent(invoice: any) {
 
       // Handle first payment
       if (invoice.billing_reason === 'subscription_create' && isPaid) {
-        updateData.subscription_status = 'active';
+        // Check if this is a trial subscription
+        const isTrial = invoice.subscription_details?.metadata?.trial_period_days || 
+                       (await stripe.subscriptions.retrieve(invoice.subscription)).trial_end !== null;
+        
+        if (isTrial) {
+          updateData.subscription_status = 'trialing';
+          log('Trial subscription created', { invoice_id: invoice.id });
+        } else {
+          updateData.subscription_status = 'active';
+        }
+        
         updateData.subscription_start_date = new Date().toISOString();
         updateData.stripe_subscription_id = invoice.subscription;
-      }
+      }  
       // Handle failed payment
       else if (isFailed) {
         updateData.subscription_status = 'past_due';
@@ -453,6 +552,13 @@ export default async function handler(req: Request): Promise<Response> {
           await handleInvoiceEvent(eventObject);
           break;
           
+        case 'customer.created':
+          log('Skipping customer.created - customer creation handled by auth flow', {
+            customer_id: eventObject.id,
+            email: eventObject.email
+          });
+          break;
+          
         case 'customer.updated':
           // Only update Stripe-specific fields
           if (eventObject.invoice_settings?.default_payment_method) {
@@ -475,17 +581,24 @@ export default async function handler(req: Request): Promise<Response> {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log('Error processing event:', error);
+      log('Error processing event:', { 
+        error: errorMessage,
+        errorType: error?.constructor?.name || typeof error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       return new Response(
         JSON.stringify({ error: 'Event processing error', message: errorMessage }),
         { status: 400, headers: corsHeaders }
       );
     }
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log('Error in webhook handler:', error);
+    log('Error in webhook handler:', { 
+      error: errorMessage,
+      errorType: error?.constructor?.name || typeof error,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     
     return new Response(
       JSON.stringify({ error: 'Webhook processing error', message: errorMessage }),

@@ -1,17 +1,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { identifyPlant } from '../../src/services/plantService';
 
@@ -21,15 +21,6 @@ const CameraScreen = () => {
   const [image, setImage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [cameraType, setCameraType] = useState('back');
-
-  // Reset state when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      // Reset the image state when screen is focused
-      setImage(null);
-      setIsLoading(false);
-    }, [])
-  );
 
   useEffect(() => {
     (async () => {
