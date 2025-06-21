@@ -23,8 +23,8 @@ const CARD_WIDTH = width - (CARD_MARGIN * 3);
 const PLANS = {
   monthly: {
     id: 'price_monthly',
-    name: 'Monthly',
-    amount: 10000, // ₹100.00 in paise
+    name: 'Monthly Plan',
+    amount: 9900, // ₹99.00 in paise
     currency: 'inr',
     interval: 'month',
     features: [
@@ -35,8 +35,9 @@ const PLANS = {
   },
   yearly: {
     id: 'price_yearly',
-    name: 'Yearly',
-    amount: 96000, // ₹960.00 in paise (20% off)
+    name: 'Yearly Plan',
+    amount: 94900, // ₹949.00 in paise (discounted price)
+    originalAmount: 118800, // ₹1,188.00 in paise (original price - ₹99 * 12)
     currency: 'inr',
     interval: 'year',
     features: [
@@ -137,13 +138,22 @@ export default function PaymentScreen() {
           </View>
         )}
         <Text style={styles.planName}>{plan.name}</Text>
-        <Text style={styles.planPrice}>
-          {formatPrice(plan.amount)}
-          <Text style={styles.planInterval}>/{plan.interval}</Text>
-        </Text>
-        {isYearly && (
-          <Text style={styles.discountText}>Save 20% vs monthly</Text>
-        )}
+        <View>
+          <View style={styles.priceRow}>
+            <Text style={styles.planPrice}>
+              {formatPrice(plan.amount)}
+              <Text style={styles.planInterval}>/{plan.interval}</Text>
+            </Text>
+            {isYearly && (
+              <Text style={[styles.originalPrice, { marginLeft: 16 }]}>
+                {formatPrice(plan.originalAmount)}
+              </Text>
+            )}
+          </View>
+          {isYearly && (
+            <Text style={[styles.discountText, { marginTop: 4 }]}>Save 20% vs monthly</Text>
+          )}
+        </View>
         <View style={styles.featuresContainer}>
           {plan.features.map((feature, index) => (
             <View key={index} style={styles.featureItem}>
@@ -192,6 +202,23 @@ export default function PaymentScreen() {
 }
 
 const styles = StyleSheet.create({
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  originalPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  originalPrice: {
+    fontSize: 20,
+    color: '#6b7280',
+    textDecorationLine: 'line-through',
+    marginLeft: 16,
+    marginBottom: 2,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -267,7 +294,9 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '800',
     color: '#0f172a',
-    marginBottom: 4,
+  },
+  trialPrice: {
+    color: '#10b981',
   },
   planInterval: {
     fontSize: 16,
