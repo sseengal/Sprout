@@ -15,6 +15,8 @@ const createLogger = (component) => {
 export const AuthContext = createContext({});
 
 import { useRouter } from 'expo-router';
+import { Platform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 export const AuthProvider = ({ children }) => {
   const logger = useMemo(() => createLogger('AuthProvider'), []);
@@ -474,31 +476,24 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       setError(null);
+      
       let redirectUrl = '';
-      let expoOwner = '';
-      let expoSlug = '';
-      let Constants = null;
       if (Platform.OS === 'web') {
         redirectUrl = `${window.location.origin}/auth/callback`;
         console.log('[Auth] Platform is web, using redirect:', redirectUrl);
       } else if (__DEV__) {
-        Constants = require('expo-constants').default;
-        expoOwner = (Constants?.manifest?.owner) || (Constants?.expoConfig?.owner) || 'sseengal';
-        expoSlug = (Constants?.manifest?.slug) || (Constants?.expoConfig?.slug) || 'sprout-plant-care';
+        const Constants = require('expo-constants').default;
+        const expoOwner = (Constants?.manifest?.owner) || (Constants?.expoConfig?.owner) || 'sseengal';
+        const expoSlug = (Constants?.manifest?.slug) || (Constants?.expoConfig?.slug) || 'sprout-plant-care';
         redirectUrl = `https://auth.expo.io/@${expoOwner}/${expoSlug}`;
-        console.log('[Auth] Platform is native dev');
-        console.log('[Auth] expoOwner:', expoOwner);
-        console.log('[Auth] expoSlug:', expoSlug);
-        console.log('[Auth] Constants.manifest:', JSON.stringify(Constants?.manifest, null, 2));
-        console.log('[Auth] Constants.expoConfig:', JSON.stringify(Constants?.expoConfig, null, 2));
-        console.log('[Auth] Using redirect URL:', redirectUrl);
+        console.log('[Auth] Platform is native dev, using redirect:', redirectUrl);
       } else {
         redirectUrl = 'sprout://auth/callback';
         console.log('[Auth] Platform is native prod, using redirect:', redirectUrl);
       }
       
-      // Start the OAuth flow
-      const { data, error: authError } = await supabase.auth.signInWithOAuth({
+      // Start the OAuth flow with timeout
+      const authPromise = supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
@@ -509,15 +504,23 @@ export const AuthProvider = ({ children }) => {
           },
         },
       });
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Authentication timed out. Please try again.')), 30000)
+      );
+
+      const { data, error: authError } = await Promise.race([authPromise, timeoutPromise]);
       
       if (authError) {
         console.error('[Auth] Error getting OAuth URL:', authError);
-        throw authError;
+        throw new Error('Failed to start authentication. Please try again.');
       }
       if (!data?.url) {
-        throw new Error('No authentication URL received from the server');
+        throw new Error('Authentication service is not available. Please try again later.');
       }
-      console.log('[Auth] Opening browser for authentication with:', data.url);
+      
+      console.log('[Auth] Opening browser for authentication');
       let browserResult;
       try {
         browserResult = await WebBrowser.openAuthSessionAsync(
@@ -528,30 +531,42 @@ export const AuthProvider = ({ children }) => {
             createTask: false,
           }
         );
-        console.log('[Auth] Browser session completed:', browserResult);
+        console.log('[Auth] Browser session completed:', browserResult.type);
       } catch (browserErr) {
-        console.error('[Auth] WebBrowser.openAuthSessionAsync threw:', browserErr);
-        throw browserErr;
+        console.error('[Auth] Browser error:', browserErr);
+        throw new Error('Failed to open authentication page. Please try again.');
       }
+      
       if (WebBrowser.maybeCompleteAuthSession) {
         WebBrowser.maybeCompleteAuthSession();
       }
+      
       if (browserResult.type === 'success' && browserResult.url) {
-        console.log('[Auth] Handling OAuth callback with URL:', browserResult.url);
+        console.log('[Auth] Handling OAuth callback');
         await handleAuthCallback(browserResult.url);
       } else if (browserResult.type === 'cancel') {
-        throw new Error('Authentication was cancelled');
+        throw new Error('Sign in was cancelled');
       } else {
         throw new Error('Authentication failed. Please try again.');
       }
     } catch (error) {
-      console.error('[Auth] Google Sign-In Error:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
-      setError(error.message);
-      throw error;
+      console.error('[Auth] Google Sign-In Error:', error.message);
+      
+      // User-friendly error messages
+      let userMessage = 'Sign in failed. Please try again.';
+      
+      if (error.message.includes('cancelled') || error.message.includes('dismissed')) {
+        userMessage = 'Sign in was cancelled';
+      } else if (error.message.includes('offline')) {
+        userMessage = 'Unable to connect. Please check your network connection.';
+      } else if (error.message.includes('timeout')) {
+        userMessage = 'Authentication timed out. Please try again.';
+      } else if (error.message.includes('access_denied')) {
+        userMessage = 'Please grant permissions to continue.';
+      }
+      
+      setError(userMessage);
+      throw new Error(userMessage);
     } finally {
       setLoading(false);
     }

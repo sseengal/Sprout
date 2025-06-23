@@ -38,20 +38,16 @@ export default function LoginScreen() {
       console.log('Starting Google Sign-In flow...');
       setIsSubmitting(true);
       setFormError('');
+      clearError?.(); // Clear any previous auth errors
       
       console.log('Calling handleGoogleSignIn...');
-      const result = await handleGoogleSignIn();
-      console.log('handleGoogleSignIn completed with result:', result);
-      // The auth state change will handle the navigation
+      await handleGoogleSignIn();
+      // On success, the auth state change will handle the navigation
     } catch (error) {
-      console.error('Error in handleGoogleLogin:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
-      setFormError(error.message || 'Failed to sign in with Google');
+      console.error('Error in handleGoogleLogin:', error);
+      // Error is already set in the auth context, no need to set it again
     } finally {
-      console.log('Google Sign-In flow completed, setting isSubmitting to false');
+      console.log('Google Sign-In flow completed');
       setIsSubmitting(false);
     }
   };
@@ -343,14 +339,16 @@ export default function LoginScreen() {
                 onPress={handleGoogleLogin}
                 disabled={loading || isSubmitting}
               >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <AntDesign name="google" size={20} color="#fff" />
-                    <Text style={styles.socialButtonText}>Continue with Google</Text>
-                  </>
-                )}
+                <View style={styles.socialButtonContent}>
+                  {(loading || isSubmitting) ? (
+                    <ActivityIndicator color="#fff" size="small" style={styles.socialButtonIcon} />
+                  ) : (
+                    <AntDesign name="google" size={20} color="#fff" style={styles.socialButtonIcon} />
+                  )}
+                  <Text style={styles.socialButtonText}>
+                    {isSubmitting ? 'Signing in...' : 'Continue with Google'}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -517,14 +515,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    minHeight: 48,
+  },
+  socialButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  socialButtonIcon: {
+    marginRight: 8,
   },
   googleButton: {
-    backgroundColor: '#fff',
+    backgroundColor: '#DB4437',
   },
   facebookButton: {
     backgroundColor: '#f5f5f5',
