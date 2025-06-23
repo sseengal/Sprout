@@ -230,7 +230,6 @@ function AuthLayout() {
     }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(auth)" />
-      <Stack.Screen name="auth/callback" />
     </Stack>
   );
 }

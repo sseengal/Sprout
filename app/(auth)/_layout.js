@@ -10,6 +10,13 @@ export default function AuthLayout() {
           animation: 'fade',
         }} 
       />
+      <Stack.Screen 
+        name="email-confirmation"
+        options={{ 
+          headerShown: false,
+          animation: 'fade',
+        }} 
+      />
     </Stack>
   );
 }
