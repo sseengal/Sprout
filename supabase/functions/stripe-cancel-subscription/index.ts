@@ -36,7 +36,13 @@ interface ErrorResponse {
 }
 
 // Initialize Stripe
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')
+if (!stripeSecretKey) {
+  console.error('Missing STRIPE_SECRET_KEY environment variable')
+  throw new Error('Missing Stripe secret key')
+}
+
+const stripe = new Stripe(stripeSecretKey, {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 })
@@ -61,13 +67,29 @@ function createErrorResponse(status: number, error: string, details?: string): R
 }
 
 // Helper function to get user ID from request
-function getUserId(req: Request): string {
-  const url = new URL(req.url)
-  const userId = url.searchParams.get('userId')
-  if (!userId) {
-    throw new Error('Missing userId parameter')
+async function getUserId(req: Request): Promise<string> {
+  try {
+    // Parse JSON body for POST requests
+    if (req.method === 'POST') {
+      const body = await req.json()
+      if (body && body.userId) {
+        return body.userId
+      }
+    }
+    
+    // Fallback to query params for GET requests
+    const url = new URL(req.url)
+    const userId = url.searchParams.get('userId')
+    
+    if (!userId) {
+      throw new Error('Missing userId parameter in request body or query params')
+    }
+    
+    return userId
+  } catch (error) {
+    console.error('Error parsing request:', error)
+    throw new Error('Invalid request format')
   }
-  return userId
 }
 
 // Helper function to get customer data
@@ -209,20 +231,17 @@ serve(async (req: Request) => {
     }
 
     // Main function logic starts here
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // Initialize Supabase client with service role key
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     
-    if (!supabaseUrl || !serviceRoleKey) {
-      const error = 'Missing required environment variables: ' + 
-                   `SUPABASE_URL: ${!!supabaseUrl}, ` +
-                   `SUPABASE_SERVICE_ROLE_KEY: ${!!serviceRoleKey}`
-      console.error(error)
-      throw new Error(error)
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase URL or service role key')
+      return createErrorResponse(500, 'Internal server error', 'Missing required environment variables')
     }
 
     console.log('Initializing Supabase admin client')
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
       auth: { 
         persistSession: false,
         autoRefreshToken: false
@@ -234,7 +253,7 @@ serve(async (req: Request) => {
 
     // Get user ID from request
     console.log('Getting user ID from request')
-    const userId = getUserId(req)
+    const userId = await getUserId(req)
     console.log('User ID from request:', userId)
     
     // Get customer data with detailed logging
@@ -270,46 +289,39 @@ serve(async (req: Request) => {
         throw new Error('No active subscription found for this customer')
       }
 
-      console.log('Cancelling subscription at period end')
+      console.log('Requesting subscription cancellation at period end')
       
-      // Update the customer record in the database
-      const { error: updateError } = await supabase
-        .from('customers')
-        .update({ 
-          cancel_at_period_end: true,
-          subscription_status: 'canceled',
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId)
-
-      if (updateError) {
-        console.error('Error updating customer record:', updateError)
-        throw new Error('Failed to update subscription status')
-      }
-
-      // Cancel the subscription in Stripe
+      // Only update the subscription in Stripe
+      // The stripe-webhook-public function will handle the database update
       const subscription = await stripe.subscriptions.update(
-        customer.stripe_subscription_id,
-        { cancel_at_period_end: true }
+        customerData.stripe_subscription_id,
+        { 
+          cancel_at_period_end: true,
+          metadata: {
+            updated_by: 'stripe-cancel-subscription',
+            user_id: userId
+          }
+        }
       )
 
-      console.log('Subscription cancellation processed:', subscription.id)
-
-      // Return success response
-      const response = {
-        success: true,
-        message: 'Subscription will be canceled at the end of the current period',
+      console.log('Subscription update initiated, waiting for webhook to process...', {
+        subscription_id: subscription.id,
         cancel_at_period_end: subscription.cancel_at_period_end,
         current_period_end: subscription.current_period_end
-      }
+      })
       
-      console.log('Returning success response:', response)
-      
+      // Return success response without updating the database
+      // The webhook will handle the database update
       return new Response(
-        JSON.stringify(response),
-        {
+        JSON.stringify({
+          success: true,
+          message: 'Subscription cancellation requested. The webhook will process the update shortly.',
+          cancel_at_period_end: subscription.cancel_at_period_end,
+          current_period_end: subscription.current_period_end
+        }),
+        { 
           status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          headers: { 'Content-Type': 'application/json' }
         }
       )
     } catch (error) {

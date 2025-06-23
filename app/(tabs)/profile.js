@@ -65,12 +65,30 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               setIsUnsubscribing(true);
-              // TODO: Implement actual unsubscribe API call
-              console.log('Unsubscribing...');
-              await new Promise(resolve => setTimeout(resolve, 1500));
+              
+              const { data, error } = await supabase.functions.invoke('stripe-cancel-subscription', {
+                body: { userId: user.id }
+              });
+
+              if (error) {
+                throw new Error(error.message || 'Failed to cancel subscription');
+              }
+
+              // Update local state
+              setSubscription(prev => ({
+                ...prev,
+                cancel_at_period_end: true,
+                subscription_status: 'canceled',
+                subscription_end_date: data.current_period_end * 1000 // Convert to milliseconds
+              }));
+
+              Alert.alert(
+                'Subscription Cancelled',
+                'Your subscription will remain active until the end of your current billing period.'
+              );
             } catch (err) {
               console.error('Error unsubscribing:', err);
-              Alert.alert('Error', 'Failed to process unsubscription. Please try again.');
+              Alert.alert('Error', err.message || 'Failed to process unsubscription. Please try again.');
             } finally {
               setIsUnsubscribing(false);
             }
