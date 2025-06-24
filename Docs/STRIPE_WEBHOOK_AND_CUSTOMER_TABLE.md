@@ -36,6 +36,9 @@
 | plan_type | text | NO | - | Type of plan |
 | billing_interval | text | NO | - | Billing interval |
 | last_payment_status | text | YES | - | Status of last payment |
+| is_lifetime | boolean | NO | false | Whether the user has lifetime access |
+| lifetime_purchased_at | timestamptz | YES | - | When lifetime access was purchased |
+| lifetime_expires_at | timestamptz | YES | - | When lifetime access expires (future use) |
 
 ### Required Fields
 - `id` (auto-generated)
@@ -63,7 +66,7 @@
    - Allowed values: `['month', 'year']`
 
 2. `plan_type_check` on column `plan_type`
-   - Allowed values: `['free', 'monthly', 'yearly']`
+   - Allowed values: `['free', 'monthly', 'yearly', 'lifetime']`
 
 3. `subscription_status_check` on column `subscription_status`
    - Allowed values: `['inactive', 'trialing', 'active', 'past_due', 'canceled', 'unpaid']`
@@ -117,6 +120,9 @@ These fields should only be updated by Stripe webhooks:
 - `cancel_at_period_end`
 - `default_payment_method`
 - `last_payment_status`
+- `is_lifetime`
+- `lifetime_purchased_at`
+- `lifetime_expires_at`
 
 ### Shared Fields
 These fields can be updated by both flows:
