@@ -1,6 +1,6 @@
 # Google OAuth Implementation Guide
 
-This document outlines the Google OAuth implementation in the Sprout app, including the current architecture, components, recent improvements, and future plans.
+This document outlines the Google OAuth implementation in the Sprout app, including the current architecture, components, and future improvements.
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -73,44 +73,52 @@ Key Methods:
 - Handles authentication tokens
 - Manages session creation
 
+## Current Issue: OAuth Redirect Failure in Expo Go
+
+### Symptoms
+- User is redirected to Google OAuth consent screen
+- After granting permissions, the flow fails with error: "Something went wrong trying to finish signing in"
+- User is not redirected back to the app
+
+### Root Cause Analysis
+1. **Redirect URL Mismatch**: 
+   - The app is using a custom scheme (`sprout://`) for production builds
+   - For Expo Go, we need to use Expo's auth proxy URL
+
+2. **WebBrowser Session Handling**:
+   - The WebBrowser session might not be properly closed after authentication
+   - The callback handler might not be receiving the auth response
+
+3. **Configuration**:
+   - Supabase and Google Cloud Console URLs are verified and correctly configured
+   - The issue appears to be in the client-side handling of the OAuth response
+
+### Next Steps
+1. [ ] Update the Google Sign-In flow to properly handle Expo Go
+2. [ ] Add better error handling and logging
+3. [ ] Test the flow in both development and production environments
+4. [ ] Document the final working configuration
+
 ## Current Status
 
 ### ✅ Implemented Features
-- Google OAuth sign-in flow using expo-web-browser
-- Session management with Supabase Auth
-- Enhanced error handling with user-friendly messages
-- Deep linking for mobile with Expo Router
-- Email verification flow
-- Error boundary for auth-related components
+- Google OAuth sign-in flow
+- Session management
+- Error handling
+- Deep linking for mobile
+- Email verification
 
 ### 🔍 Known Issues
-- Network connectivity checks need improvement for mobile
-- Some edge cases in error recovery
-- Basic UI states during auth flow
-
-## Recent Improvements (June 2024)
-
-1. **WebBrowser Integration**
-   - Added `expo-web-browser` for secure OAuth flow
-   - Implemented proper browser-based authentication
-   - Added error handling for browser-related issues
-
-2. **Error Handling**
-   - Added user-friendly error messages
-   - Implemented error boundaries for auth components
-   - Improved error logging for debugging
-
-3. **Code Quality**
-   - Removed web-specific code (navigator.onLine)
-   - Added proper TypeScript types
-   - Improved code organization
+- Limited error messages for users
+- Basic UI for auth flows
+- Some edge cases not fully handled
 
 ## Future Improvements
 
 ### 1. Enhanced Error Handling
-- Implement proper network connectivity checks using `@react-native-community/netinfo`
-- Add retry mechanism for failed auth attempts
-- Improve error recovery flows
+- More specific error messages
+- Better handling of network issues
+- Improved error recovery
 
 ### 2. UI/UX Improvements
 - Better loading states
@@ -118,10 +126,9 @@ Key Methods:
 - Improved sign-in/sign-up forms
 
 ### 3. Security
-- Session validation and management
-- Rate limiting for auth endpoints
-- Token refresh and expiration handling
-- Secure storage for auth tokens
+- Session validation
+- Rate limiting
+- Token refresh handling
 
 ### 4. Testing
 - Unit tests for auth flows
@@ -133,36 +140,46 @@ Key Methods:
 ### Common Issues
 
 1. **OAuth Redirect Errors**
-   - Verify redirect URIs in Google Cloud Console
-   - Check Supabase auth configuration
-   - Ensure deep linking is properly configured
+   - Verify redirect URIs in Google Cloud Console match exactly
+   - Check Supabase auth configuration for correct client IDs and secrets
+   - Ensure deep linking is properly configured in app.json
+   - For Expo Go, check for proxy-related issues
 
-2. **Session Not Persisting**
-   - Verify token storage
+2. **Development Build Issues**
+   - Ensure development build is properly configured
+   - Verify bundle identifier/package name matches everywhere
+   - Check that the correct signing certificates are used
+
+3. **Session Management**
+   - Verify token storage is working
    - Check for session conflicts
-   - Ensure proper error handling
-
-3. **Network Issues**
-   - Handle offline scenarios
-   - Implement retry logic
-   - Provide user feedback
+   - Ensure proper error handling for expired sessions
 
 ### Debugging Tips
 
-1. **Common Issues**
-   - OAuth redirect errors: Verify redirect URIs in Google Cloud Console and Supabase
-   - Browser issues: Ensure `expo-web-browser` is properly installed
-   - Network errors: Check connectivity and CORS settings
-
-2. **Logging**
-   - Check Metro bundler logs for runtime errors
+1. **Logs & Monitoring**
+   - Check browser console logs
    - Monitor network requests in browser dev tools
-   - Review Supabase auth logs
+   - Review Supabase authentication logs
+   - Enable debug logging in your app
 
-3. **Testing**
-   - Test on both iOS and Android
-   - Verify in both development and production environments
-   - Test with different network conditions
+2. **Testing**
+   - Test on multiple devices and platforms
+   - Try different network conditions
+   - Test with various browser privacy settings
+
+3. **Development Builds**
+   - Clear app data between tests
+   - Verify deep linking configuration
+   - Check for any console warnings about misconfigurations
+
+### Getting Help
+
+If you encounter issues:
+1. Check the [Supabase Auth documentation](https://supabase.com/docs/guides/auth)
+2. Review the [Expo Auth Session guide](https://docs.expo.dev/guides/authentication/)
+3. Check for any open issues in the relevant GitHub repositories
+4. If the issue persists, document the exact error message and steps to reproduce
 
 ## Related Files
 

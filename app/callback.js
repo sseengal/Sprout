@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { View, ActivityIndicator, Text, StyleSheet, Button } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function AuthCallback() {
