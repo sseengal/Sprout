@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -9,7 +9,9 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    Platform,
+    Linking
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { createStripeCheckoutSession } from '../../lib/stripe';
@@ -83,9 +85,37 @@ export default function PaymentScreen() {
     }
   };
 
+  // Handle deep links for payment success/cancel
+  useEffect(() => {
+    const handleDeepLink = ({ url }) => {
+      if (!url) return;
+      
+      if (url.includes('payment/success')) {
+        setShowWebView(false);
+        Alert.alert('Success', 'Your subscription is now active!');
+      } else if (url.includes('payment/cancel')) {
+        setShowWebView(false);
+        Alert.alert('Cancelled', 'Your subscription was cancelled');
+      }
+    };
+
+    // Listen for incoming deep links
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    
+    // Clean up
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const handleWebViewNav = ({ url }) => {
     if (!url) return;
-    if (url.includes('success')) {
+    
+    // This will now be handled by the deep link handler
+    if (url.startsWith('sprout://payment/')) {
+      // The deep link handler will take care of this
+      return;
+    } else if (url.includes('success')) {
       Alert.alert('Success', 'Subscription activated successfully!');
       setShowWebView(false);
     } else if (url.includes('cancel')) {

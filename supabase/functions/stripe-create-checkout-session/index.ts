@@ -286,8 +286,8 @@ serve(async (req) => {
           quantity: 1,
         }],
         mode: 'subscription',
-        success_url: `${Deno.env.get('APP_URL')}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${Deno.env.get('APP_URL')}/payment/cancel`,
+        success_url: `sprout://payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `sprout://payment/cancel`,
         metadata: {
           user_id,
           plan_id,
