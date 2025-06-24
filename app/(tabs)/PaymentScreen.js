@@ -1,17 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    Linking,
     SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
-    Platform,
-    Linking
+    View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { createStripeCheckoutSession } from '../../lib/stripe';
@@ -125,17 +124,19 @@ export default function PaymentScreen() {
 
   if (showWebView) {
     return (
-      <WebView
-        source={{ uri: checkoutUrl }}
-        style={styles.webView}
-        onNavigationStateChange={handleWebViewNav}
-        startInLoadingState
-        renderLoading={() => (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6366f1" />
-          </View>
-        )}
-      />
+      <SafeAreaView style={styles.safeArea}>
+        <WebView
+          source={{ uri: checkoutUrl }}
+          style={styles.webView}
+          onNavigationStateChange={handleWebViewNav}
+          startInLoadingState
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+            </View>
+          )}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -187,48 +188,76 @@ export default function PaymentScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Choose Your Plan</Text>
-          <Text style={styles.subtitle}>Select the plan that works best for you</Text>
-        </View>
-        
-        <View style={styles.plansContainer}>
-          <PlanCard planKey="monthly" isSelected={selectedPlan === 'monthly'} />
-          <PlanCard planKey="yearly" isSelected={selectedPlan === 'yearly'} />
-        </View>
-        
-        <TouchableOpacity
-          style={[styles.subscribeButton, isLoading && styles.subscribeButtonDisabled]}
-          onPress={startPayment}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.subscribeButtonText}>
-              Subscribe {selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <View style={styles.scrollContainer}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Choose Your Plan</Text>
+              <Text style={styles.subtitle}>Select the plan that works best for you</Text>
+            </View>
+            
+            <View style={styles.plansContainer}>
+              <PlanCard planKey="monthly" isSelected={selectedPlan === 'monthly'} />
+              <PlanCard planKey="yearly" isSelected={selectedPlan === 'yearly'} />
+            </View>
+            
+            <Text style={styles.note}>
+              You can cancel your subscription anytime. Payment will be charged to your payment method at confirmation of purchase.
             </Text>
-          )}
-        </TouchableOpacity>
+          </ScrollView>
+        </View>
         
-        <Text style={styles.note}>
-          You can cancel your subscription anytime. Payment will be charged to your payment method at confirmation of purchase.
-        </Text>
-      </ScrollView>
+        <View style={styles.stickyFooter}>
+          <TouchableOpacity
+            style={[styles.subscribeButton, isLoading && styles.subscribeButtonDisabled]}
+            onPress={startPayment}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.subscribeButtonText}>
+                Subscribe {selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  scrollContainer: {
+    flex: 1,
+  },
   scrollContent: {
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 100, // Extra padding to account for the sticky footer
+  },
+  stickyFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#f8fafc',
+    padding: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   header: {
     marginBottom: 32,
@@ -246,7 +275,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   plansContainer: {
-    marginBottom: 32,
+    marginBottom: 16,
   },
   planCard: {
     backgroundColor: 'white',
@@ -327,10 +356,9 @@ const styles = StyleSheet.create({
   },
   subscribeButton: {
     backgroundColor: '#6366f1',
-    padding: 18,
+    padding: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 24,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -351,8 +379,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'white',
+    paddingTop: 0, // Let SafeAreaView handle the padding
+  },
   webView: {
     flex: 1,
+    marginTop: 0, // Ensure WebView starts right after the status bar
   },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
