@@ -1,6 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { usePlantAnalysis } from '../../hooks/usePlantAnalysis';
+import { useAuth } from '../../contexts/AuthContext';
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CareInstructionsSection from '../../components/plant/CareInstructionsSection';
@@ -53,6 +55,8 @@ export default function AnalysisScreen() {
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiError, setGeminiError] = useState(null);
   const [geminiPlantName, setGeminiPlantName] = useState('');
+  const { user } = useAuth();
+  const { recordAnalysis, usage } = usePlantAnalysis();
 
   // Helper: get top PlantNet suggestion name
   const getPlantNetTopName = () => {
@@ -78,6 +82,37 @@ export default function AnalysisScreen() {
           setGeminiError('Could not determine a valid plant name from PlantNet. Please try another image.');
           return;
         }
+        // Record the analysis
+        if (user?.id) {
+          try {
+            const result = await recordAnalysis(
+              user.id,
+              'plant_identification',
+              plantName,
+              plantData?.suggestions?.[0]?.probability || 0
+            );
+            
+            // Show alert if limit reached
+            if (result?.error === 'ANALYSIS_LIMIT_REACHED') {
+              Alert.alert(
+                'Limit Reached', 
+                `You've used all your monthly analyses. ${result.message}`,
+                [{ text: 'OK' }]
+              );
+            }
+          } catch (error) {
+            console.error('Error recording analysis:', error);
+            // Only show alert for limit reached, silently log other errors
+            if (error?.error === 'ANALYSIS_LIMIT_REACHED') {
+              Alert.alert(
+                'Limit Reached', 
+                `You've used all your monthly analyses. ${error.message}`,
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        }
+
         // Use the Gemini API with the top PlantNet suggestion
         const info = await getPlantInfo(plantName);
         if (!info || Object.keys(info).length === 0) {
@@ -145,9 +180,20 @@ export default function AnalysisScreen() {
     }
   };
 
+  // Debug log to check if usage data is available
+  console.log('Usage data:', usage);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f7f0' }} edges={['top']}>
       <ScrollView style={{ flex: 1, padding: 16 }}>
+        <View style={styles.headerContainer}>
+          <View style={styles.usageContainer}>
+            <Text style={styles.usageLabel}>Analyses Left</Text>
+            <Text style={styles.usageCount}>
+              {usage?.remaining !== undefined ? usage.remaining : 'Loading...'}
+            </Text>
+          </View>
+        </View>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
         ) : null}
@@ -213,6 +259,34 @@ export default function AnalysisScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 16,
+  },
+  usageContainer: {
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+  },
+  usageLabel: {
+    fontSize: 14,
+    color: '#2e7d32',
+    marginRight: 6,
+    fontWeight: '500',
+  },
+  usageCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1b5e20',
+    minWidth: 20,
+    textAlign: 'center',
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
