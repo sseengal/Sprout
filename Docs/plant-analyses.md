@@ -183,7 +183,17 @@ if (error) {
 
 ## Frontend Implementation
 
-### 1. Utility Functions (`lib/plantAnalysis.js`)
+### 1. Saved Plants Management
+
+- Saved plants are stored locally using `AsyncStorage` with the key `SPROUT_SAVED_PLANTS`
+- The `SavedPlantsContext` manages the state of saved plants across the app
+- Each saved plant includes:
+  - `id`: Unique identifier
+  - `imageUri`: URI of the plant image
+  - `plantData`: Object containing plant information
+  - `savedAt`: Timestamp when the plant was saved
+
+### 2. Utility Functions (`lib/plantAnalysis.js`)
 
 The utility functions provide a clean API for interacting with the plant analysis backend:
 
@@ -364,6 +374,7 @@ Common error codes:
    - Enhance the usage counter display
    - Add visual feedback during analysis
    - Show usage history
+   - Provide clear feedback when approaching or reaching analysis limits
 
 ### Medium Priority
 4. **Subscription Integration**
@@ -382,6 +393,22 @@ Common error codes:
    - Implement batch processing for multiple images
    - Add offline support with sync
    - Implement usage notifications
+
+## Removed Features
+
+### Clear All Plants Functionality
+- The development-only "Clear All Plants" feature has been removed from the production codebase
+- This was a temporary utility for testing and is no longer needed in the main application flow
+- For development purposes, the functionality can be re-implemented by clearing the `SPROUT_SAVED_PLANTS` key in AsyncStorage
+
+## Current Implementation Status
+
+- [x] User analysis tracking by subscription plan
+- [x] Monthly usage limits enforcement
+- [x] Saved plants management
+- [x] Usage statistics display
+- [ ] Usage history visualization (planned)
+- [ ] Analysis limit notifications (planned)
 
 ## Known Issues
 - None currently identified
