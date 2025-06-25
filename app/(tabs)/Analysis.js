@@ -69,20 +69,36 @@ export default function AnalysisScreen() {
 
 
 
-  // Fetch Gemini info on mount/plant change
+  // Handle plant analysis on mount/plant change
   useEffect(() => {
-    const fetchGemini = async () => {
+    const handlePlantAnalysis = async () => {
+      // Skip if this is a saved view
+      if (searchParams?.isSavedView) {
+        // Use the saved Gemini info if available
+        if (searchParams.savedGeminiInfo) {
+          setGeminiInfo(JSON.parse(searchParams.savedGeminiInfo));
+        } else {
+          setGeminiError('No saved plant information available.');
+        }
+        setGeminiLoading(false);
+        return;
+      }
+
+      // This is a new analysis - proceed with API calls
       setGeminiLoading(true);
       setGeminiError(null);
       setGeminiInfo(null);
+      
       try {
         const plantName = getPlantNetTopName();
         setGeminiPlantName(plantName);
+        
         if (!plantName) {
           setGeminiError('Could not determine a valid plant name from PlantNet. Please try another image.');
           return;
         }
-        // Record the analysis
+
+        // Only record analysis for new identifications
         if (user?.id) {
           try {
             const result = await recordAnalysis(
@@ -99,21 +115,24 @@ export default function AnalysisScreen() {
                 `You've used all your monthly analyses. ${result.message}`,
                 [{ text: 'OK' }]
               );
+              setGeminiLoading(false);
+              return;
             }
           } catch (error) {
             console.error('Error recording analysis:', error);
-            // Only show alert for limit reached, silently log other errors
             if (error?.error === 'ANALYSIS_LIMIT_REACHED') {
               Alert.alert(
                 'Limit Reached', 
                 `You've used all your monthly analyses. ${error.message}`,
                 [{ text: 'OK' }]
               );
+              setGeminiLoading(false);
+              return;
             }
           }
         }
 
-        // Use the Gemini API with the top PlantNet suggestion
+        // Only fetch Gemini info if we don't have it already
         const info = await getPlantInfo(plantName);
         if (!info || Object.keys(info).length === 0) {
           setGeminiError('No detailed plant information could be found for this analysis.');
@@ -122,15 +141,15 @@ export default function AnalysisScreen() {
         }
         setGeminiInfo(info);
       } catch (err) {
-        setGeminiError(err.message || 'Failed to fetch Gemini info');
+        setGeminiError(err.message || 'Failed to fetch plant information');
         setGeminiInfo(null);
       } finally {
         setGeminiLoading(false);
       }
     };
-    fetchGemini();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name]);
+
+    handlePlantAnalysis();
+  }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name, searchParams?.isSavedView]);
 
   // Only show plant info if we have Gemini data
   const plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
@@ -170,7 +189,8 @@ export default function AnalysisScreen() {
         plantData: {
           ...plantData,
           commonName,
-          scientificName
+          scientificName,
+          geminiInfo: geminiInfo // Save the Gemini info for later use
         },
         imageUri: imageUri || '',
         id: plantId,

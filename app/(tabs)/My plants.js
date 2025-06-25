@@ -16,7 +16,9 @@ export default function MyPlantsScreen() {
         pathname: '/(tabs)/Analysis',
         params: { 
           plantData: JSON.stringify(item.plantData),
-          imageUri: item.imageUri 
+          imageUri: item.imageUri,
+          isSavedView: true,  // Mark this as a saved plant view
+          savedGeminiInfo: item.plantData.geminiInfo  // Include previously fetched Gemini data
         }
       })}
     >
@@ -48,7 +50,6 @@ export default function MyPlantsScreen() {
           </View>
         </View>
       </SafeAreaView>
-      
       <View style={styles.content}>
         {savedPlants.length > 0 ? (
           <FlatList
