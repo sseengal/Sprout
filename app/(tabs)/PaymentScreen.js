@@ -22,6 +22,20 @@ const CARD_WIDTH = width - (CARD_MARGIN * 3);
 
 // Subscription plans
 const PLANS = {
+  trial: {
+    id: 'trial',
+    name: 'Free Trial',
+    amount: 0,
+    currency: 'inr',
+    interval: 'none',
+    isTrial: true,
+    features: [
+      '5 free analyses',
+      '14 days trial period',
+      'No credit card required',
+      'Cancel anytime'
+    ]
+  },
   monthly: {
     id: 'price_monthly',
     name: 'Monthly',
@@ -63,6 +77,36 @@ export default function PaymentScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Please sign in to continue');
       
+      // For trial, we'll handle it differently
+      if (plan.isTrial) {
+        const { data, error } = await supabase
+          .rpc('start_trial', { p_user_id: user.id });
+          
+        if (error) throw error;
+        
+        if (data && data.success === false) {
+          // If trial couldn't be started (e.g., already has an active trial)
+          Alert.alert('Trial Not Available', data.message || 'You already have an active or used trial.');
+          return;
+        }
+        
+        Alert.alert(
+          'Trial Started!', 
+          'Your 14-day trial with 5 free analyses has been activated. Start analyzing your plants now!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate back to home or analysis screen
+                router.replace('/(tabs)/');
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      // For paid plans, use Stripe checkout
       const checkoutUrl = await createStripeCheckoutSession({
         user_id: user.id,
         user_email: user.email,
@@ -151,13 +195,15 @@ export default function PaymentScreen() {
   const PlanCard = ({ planKey, isSelected }) => {
     const plan = PLANS[planKey];
     const isYearly = planKey === 'yearly';
+    const isTrial = planKey === 'trial';
     
     return (
       <TouchableOpacity
         style={[
           styles.planCard,
           isSelected && styles.planCardSelected,
-          isYearly && styles.popularPlan
+          isYearly && styles.popularPlan,
+          isTrial && styles.trialPlan
         ]}
         onPress={() => setSelectedPlan(planKey)}
         activeOpacity={0.8}
@@ -169,8 +215,8 @@ export default function PaymentScreen() {
         )}
         <Text style={styles.planName}>{plan.name}</Text>
         <Text style={styles.planPrice}>
-          {formatPrice(plan.amount)}
-          <Text style={styles.planInterval}>/{plan.interval}</Text>
+          {isTrial ? 'Free' : formatPrice(plan.amount)}
+          {!isTrial && <Text style={styles.planInterval}>/{plan.interval}</Text>}
         </Text>
         {isYearly && (
           <Text style={styles.discountText}>Save 20% vs monthly</Text>
@@ -198,6 +244,7 @@ export default function PaymentScreen() {
             </View>
             
             <View style={styles.plansContainer}>
+              <PlanCard planKey="trial" isSelected={selectedPlan === 'trial'} />
               <PlanCard planKey="monthly" isSelected={selectedPlan === 'monthly'} />
               <PlanCard planKey="yearly" isSelected={selectedPlan === 'yearly'} />
             </View>
@@ -296,6 +343,11 @@ const styles = StyleSheet.create({
     borderColor: '#6366f1',
     borderWidth: 2,
     backgroundColor: '#f8fafc',
+  },
+  trialPlan: {
+    borderTopColor: '#10b981',
+    borderTopWidth: 3,
+    paddingTop: 28,
   },
   popularPlan: {
     borderTopWidth: 3,
