@@ -17,24 +17,57 @@ The `plant_analyses` table and its associated functions provide a system for tra
 | `billing_cycle_start` | DATE | Start of the billing cycle (YYYY-MM-01) |
 | `plant_name` | TEXT | Common name of the identified plant |
 | `confidence_score` | NUMERIC(5,2) | Confidence score from 0-1 |
+| `purchase_id` | UUID | Optional reference to analysis_purchases.id if this analysis used a purchased pack |
+
+### Table: `public.analysis_purchases`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | References `auth.users.id` |
+| `quantity` | INTEGER | Number of analyses purchased |
+| `amount_paid` | INTEGER | Amount paid in paise |
+| `stripe_payment_intent_id` | TEXT | Stripe payment intent ID |
+| `analyses_used` | INTEGER | Number of analyses already used from this purchase |
+| `created_at` | TIMESTAMPTZ | When the purchase was made |
+| `expires_at` | TIMESTAMPTZ | When the purchased analyses expire (null = never) |
 
 ### Indexes
 - `idx_plant_analyses_user_id` - For fast user lookups
 - `idx_plant_analyses_created_at` - For time-based queries
 - `idx_plant_analyses_billing_cycle` - For billing cycle calculations
+- `idx_analysis_purchases_user_id` - For looking up user's purchases
+- `idx_analysis_purchases_expires` - For finding expired purchases
+
+## Analysis Packs
+
+Users can purchase additional analysis packs when they need more analyses than their current plan allows. These packs provide a one-time addition to their analysis limit.
+
+### Available Packs
+
+| Pack | Analyses | Price (INR) | Validity |
+|------|----------|-------------|----------|
+| Basic Pack | 10 | 99 | 30 days |
 
 ## Functions
 
 ### 1. `get_user_analysis_usage(p_user_id UUID)`
+
+**Updated Behavior:**
+- Now includes purchased analyses in the total available count
+- Returns additional fields for purchased analyses tracking
 
 **Returns:** A table with usage statistics
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `total_analyses` | BIGINT | Total analyses ever performed |
-| `current_billing_cycle_analyses` | BIGINT | Analyses in current billing cycle |
+| `current_billing_cycle_analyses` | BIGINT | Analyses used in current billing cycle |
 | `current_billing_cycle_start` | DATE | Start of current billing cycle |
 | `current_billing_cycle_end` | DATE | End of current billing cycle |
+| `purchased_analyses_available` | INTEGER | Number of purchased analyses available |
+| `purchased_analyses_used` | INTEGER | Number of purchased analyses used |
+| `purchased_analyses_expiring_soon` | INTEGER | Number of purchased analyses expiring in the next 7 days |
 
 **Example:**
 ```sql
@@ -52,7 +85,25 @@ Checks if the user is within their analysis limit for the current billing cycle.
 SELECT public.can_perform_analysis('user-uuid-here');
 ```
 
-### 3. `record_plant_analysis(p_user_id UUID, p_analysis_type TEXT, p_plant_name TEXT, p_confidence_score NUMERIC)`
+### 3. `purchase_analysis_pack(p_user_id UUID, pack_id TEXT, payment_intent_id TEXT)`
+
+**Returns:** JSONB - Response with purchase details
+
+Records a new analysis pack purchase and updates the user's available analyses.
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "purchaseId": "uuid-here",
+    "analysesAdded": 10,
+    "totalAvailable": 15
+  }
+}
+```
+
+### 4. `record_plant_analysis(p_user_id UUID, p_analysis_type TEXT, p_plant_name TEXT, p_confidence_score NUMERIC, p_use_purchased BOOLEAN DEFAULT FALSE)`
 
 **Returns:** JSONB - Response object with analysis details and usage information
 
@@ -106,6 +157,40 @@ SELECT public.record_plant_analysis(
   'Rose',
   0.92
 );
+```
+
+## API Endpoints
+
+### 1. `POST /api/analyses/purchase`
+
+Initiates a purchase of additional analyses.
+
+**Request Body:**
+```json
+{
+  "pack_id": "basic_pack_10"
+}
+```
+
+**Response:**
+- 200: Success - Returns Stripe Checkout URL
+- 400: Invalid request
+- 401: Unauthorized
+
+### 2. `GET /api/analyses/usage`
+
+Gets the current user's analysis usage and limits.
+
+**Response:**
+```json
+{
+  "monthly_limit": 5,
+  "monthly_used": 3,
+  "purchased_available": 10,
+  "purchased_used": 2,
+  "purchased_expiring_soon": 0,
+  "total_remaining": 10
+}
 ```
 
 ## Usage in Application
@@ -180,6 +265,28 @@ if (error) {
 - `record_plant_analysis()` will throw an exception if the user has reached their analysis limit
 - All functions return NULL if the user is not found
 - Check for errors in the Supabase response and handle appropriately
+
+## Frontend Implementation
+
+### 1. Displaying Usage
+
+Update the profile screen to show:
+- Monthly usage (X of Y used)
+- Purchased analyses available
+- Option to buy more analyses
+
+### 2. Purchase Flow
+
+1. User clicks "Buy More Analyses"
+2. Show available packs with prices
+3. On selection, initiate Stripe Checkout
+4. After successful payment, update the UI with new limits
+
+### 3. Usage Priority
+
+Analyses are consumed in this order:
+1. Monthly plan analyses (resets each billing cycle)
+2. Oldest purchased analyses (FIFO)
 
 ## Frontend Implementation
 

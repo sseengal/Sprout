@@ -1,10 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { 
-  getUserAnalysisUsage, 
-  canPerformAnalysis as canPerformAnalysisUtil,
-  recordPlantAnalysis as recordPlantAnalysisUtil
-} from '../lib/plantAnalysis';
-import { supabase } from '../lib/supabase';
+import { useCallback, useState } from 'react';
+import { getAvailableCredits, useAnalysis } from '../lib/analysisCredits';
+import { recordPlantAnalysis as recordPlantAnalysisUtil } from '../lib/plantAnalysis';
 
 /**
  * Custom hook to manage plant analysis functionality
@@ -30,42 +26,26 @@ export const usePlantAnalysis = () => {
     setError(null);
     
     try {
-      // Get usage data
-      const { data: usageData, error: usageError, message } = await getUserAnalysisUsage(userId);
+      // Get available credits using the utility function
+      const credits = await getAvailableCredits(userId);
       
-      if (usageError) {
-        setError({ error: usageError, message });
+      if (!credits) {
+        setError({ 
+          error: 'CREDITS_FETCH_ERROR', 
+          message: 'Failed to fetch available credits' 
+        });
         setUsage(null);
         return;
       }
 
-      // Get user's plan limit
-      const { data: planData, error: planError } = await supabase
-        .from('customers')
-        .select('plan_limit_id, plan_limits(monthly_analyses_limit)')
-        .eq('user_id', userId)
-        .single();
-
-      if (planError) {
-        console.error('Error fetching plan limit:', planError);
-        // Default to free plan limit if we can't fetch the plan
-        setUsage({
-          ...usageData,
-          remaining: 5 - (usageData.currentBillingCycleAnalyses || 0),
-          monthlyLimit: 5
-        });
-        return;
-      }
-
-      // Calculate remaining analyses
-      const monthlyLimit = planData?.plan_limits?.monthly_analyses_limit || 5;
-      const remaining = Math.max(0, monthlyLimit - (usageData.currentBillingCycleAnalyses || 0));
-
-      // Update usage with remaining count
+      // Update usage with the credits data
       setUsage({
-        ...usageData,
-        remaining,
-        monthlyLimit
+        remaining: credits.total,
+        trial: credits.trial,
+        subscription: credits.subscription,
+        purchase: credits.purchase,
+        total: credits.total,
+        monthlyLimit: credits.subscription > 0 ? 20 : 5 // Default to 5 for non-subscribers, 20 for subscribers
       });
     } catch (err) {
       console.error('Error in refreshUsage:', err);
@@ -86,8 +66,13 @@ export const usePlantAnalysis = () => {
   const checkCanAnalyze = useCallback(async (userId) => {
     if (!userId) return false;
     
-    const { data, error: checkError } = await canPerformAnalysisUtil(userId);
-    return !checkError && data === true;
+    try {
+      const credits = await getAvailableCredits(userId);
+      return credits.total > 0;
+    } catch (error) {
+      console.error('Error checking analysis permission:', error);
+      return false;
+    }
   }, []);
 
   /**
@@ -116,7 +101,11 @@ export const usePlantAnalysis = () => {
 
     // Refresh usage after recording if successful
     if (result.success) {
-      await refreshUsage(userId);
+      // Use the useAnalysis utility to decrement the credit count
+      const { success } = await useAnalysis(userId);
+      if (success) {
+        await refreshUsage(userId);
+      }
     }
 
     return result;

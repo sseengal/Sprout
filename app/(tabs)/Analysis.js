@@ -1,8 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { usePlantAnalysis } from '../../hooks/usePlantAnalysis';
-import { useAuth } from '../../contexts/AuthContext';
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CareInstructionsSection from '../../components/plant/CareInstructionsSection';
@@ -10,7 +8,9 @@ import ConfidenceBadge from '../../components/plant/ConfidenceBadge';
 import NoteContainer from '../../components/plant/NoteContainer';
 import PlantInfoSection from '../../components/plant/PlantInfoSection';
 import SaveButton from '../../components/plant/SaveButton';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
+import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
 import { extractPlantInfo } from '../../utils/plantDetails';
 
 import { getPlantInfo } from '../../utils/geminiService';
@@ -56,7 +56,8 @@ export default function AnalysisScreen() {
   const [geminiError, setGeminiError] = useState(null);
   const [geminiPlantName, setGeminiPlantName] = useState('');
   const { user } = useAuth();
-  const { recordAnalysis, usage } = usePlantAnalysis();
+  const [credits, setCredits] = useState({ total: 0, trial: 0, subscription: 0, purchase: 0 });
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 
   // Helper: get top PlantNet suggestion name
   const getPlantNetTopName = () => {
@@ -101,22 +102,25 @@ export default function AnalysisScreen() {
         // Only record analysis for new identifications
         if (user?.id) {
           try {
-            const result = await recordAnalysis(
-              user.id,
-              'plant_identification',
-              plantName,
-              plantData?.suggestions?.[0]?.probability || 0
-            );
-            
-            // Show alert if limit reached
-            if (result?.error === 'ANALYSIS_LIMIT_REACHED') {
+            // Check if user has enough credits
+            const creditCheck = await getAvailableCredits(user.id);
+            if (creditCheck.total <= 0) {
               Alert.alert(
                 'Limit Reached', 
-                `You've used all your monthly analyses. ${result.message}`,
+                'You\'ve used all your available analyses. Please upgrade your plan for more.',
                 [{ text: 'OK' }]
               );
               setGeminiLoading(false);
               return;
+            }
+
+            // Record the analysis
+            const result = await useAnalysis(user.id);
+            
+            // Update local credits state
+            if (result.success) {
+              const newCredits = await getAvailableCredits(user.id);
+              setCredits(newCredits);
             }
           } catch (error) {
             console.error('Error recording analysis:', error);
@@ -200,8 +204,24 @@ export default function AnalysisScreen() {
     }
   };
 
-  // Debug log to check if usage data is available
-  console.log('Usage data:', usage);
+  // Load credits on mount and when user changes
+  useEffect(() => {
+    const loadCredits = async () => {
+      if (!user?.id) return;
+      
+      setIsLoadingCredits(true);
+      try {
+        const creditData = await getAvailableCredits(user.id);
+        setCredits(creditData);
+      } catch (error) {
+        console.error('Error loading credits:', error);
+      } finally {
+        setIsLoadingCredits(false);
+      }
+    };
+
+    loadCredits();
+  }, [user?.id]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f7f0' }} edges={['top']}>
@@ -210,8 +230,13 @@ export default function AnalysisScreen() {
           <View style={styles.usageContainer}>
             <Text style={styles.usageLabel}>Analyses Left</Text>
             <Text style={styles.usageCount}>
-              {usage?.remaining !== undefined ? usage.remaining : 'Loading...'}
+              {!isLoadingCredits ? credits.total : '...'}
             </Text>
+            {credits.total === 0 && (
+              <Text style={styles.upgradeText}>
+                Upgrade for more analyses
+              </Text>
+            )}
           </View>
         </View>
         {imageUri ? (
@@ -286,13 +311,15 @@ const styles = StyleSheet.create({
   },
   usageContainer: {
     backgroundColor: '#e8f5e9',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#c8e6c9',
+    minWidth: 120,
+    justifyContent: 'space-between',
   },
   usageLabel: {
     fontSize: 14,
@@ -304,8 +331,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1b5e20',
-    minWidth: 20,
+    minWidth: 24,
     textAlign: 'center',
+    marginLeft: 4,
+  },
+  upgradeText: {
+    fontSize: 12,
+    color: '#ff6d00',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   centered: {
     flex: 1,

@@ -1,11 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { purchaseAnalyses } from '../../lib/analyses';
+import { supabase } from '../../lib/supabase';
+import { getAvailableCredits, hasActiveSubscription, getTotalPurchasedCredits } from '../../lib/analysisCredits';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -61,152 +62,89 @@ export default function ProfileScreen() {
 
   // Fetch subscription and analysis usage data
   const fetchSubscription = useCallback(async () => {
-    if (!user) {
-      console.log('No user object available');
+    if (!user?.id) {
+      console.log('No user ID available');
       return;
     }
     
     try {
       setSubscriptionLoading(true);
-      console.log('Fetching subscription data for user:', user);
+      console.log('Fetching subscription and analysis data for user:', user.id);
       
-      // Safely extract user ID with fallbacks
-      let userId = user?.id;
+      // Use the utility functions to get the data
+      const [isSubscribed, credits, customerData] = await Promise.all([
+        hasActiveSubscription(user.id),
+        getAvailableCredits(user.id),
+        // Get customer data for additional subscription details
+        supabase
+          .from('customers')
+          .select('*')
+          .eq('user_id', user.id)
+          .single()
+          .then(({ data }) => data)
+      ]);
       
-      // Log the raw user ID and its type
-      console.log('Raw user ID:', userId, 'Type:', typeof userId);
-      
-      // Handle different ID formats
-      if (userId === null || userId === undefined) {
-        console.error('User ID is null or undefined');
-        throw new Error('User ID not available');
-      }
-      
-      // If userId is an object, try to extract the UUID
-      if (typeof userId === 'object') {
-        console.log('User ID is an object, attempting to extract ID:', userId);
-        // Try common ID properties that might contain the UUID
-        userId = userId.id || userId.user_id || userId.uid || userId.userId || 
-                (userId.toString ? userId.toString() : JSON.stringify(userId));
-        console.log('Extracted user ID:', userId);
-      }
-      
-      // Ensure it's a string and clean it up
-      userId = String(userId).trim();
-      
-      // If it's a UUID in string format, ensure it's in the correct format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(userId)) {
-        console.error('Invalid UUID format for user ID:', userId);
-        throw new Error('Invalid user ID format');
-      }
-      
-      console.log('Using user ID for query:', userId);
-      
-      // First, try to get the customer data
-      console.log('Fetching customer data...');
-      const { data: customerData, error: customerError } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      if (customerError) {
-        console.error('Error fetching customer data:', customerError);
-        throw customerError;
-      }
-      
+      console.log('Subscription status:', isSubscribed ? 'Active' : 'Not active');
       console.log('Customer data:', customerData);
-      setSubscription(customerData || null);
+      console.log('Available credits:', credits);
       
-      // Then, get the analysis purchases
-      console.log('Fetching analysis purchases...');
-      const { data: purchases, error: purchaseError } = await supabase
-        .from('analysis_purchases')
-        .select('quantity, used_count, expires_at, created_at')
-        .eq('user_id', userId)
-        .gte('expires_at', new Date().toISOString());
-      
-      if (purchaseError) {
-        console.error('Error fetching analysis purchases:', purchaseError);
-        return [];
+      // Update the subscription state with customer data if available
+      if (customerData) {
+        setSubscription({
+          subscription_status: isSubscribed ? 'active' : 'inactive',
+          plan_type: customerData.plan_type,
+          billing_interval: customerData.billing_interval,
+          subscription_start_date: customerData.subscription_start_date,
+          subscription_end_date: customerData.subscription_end_date,
+          next_billing_date: customerData.next_billing_date,
+          cancel_at_period_end: customerData.cancel_at_period_end,
+          trial_end_date: customerData.trial_end_date
+        });
+      } else {
+        setSubscription({
+          subscription_status: isSubscribed ? 'active' : 'inactive',
+          trial_end_date: credits.trial > 0 ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() : null
+        });
       }
       
-      if (!purchases || purchases.length === 0) {
-        console.log('No active analysis purchases found for user');
-        return [];
-      }
+      // Update analysis usage state
+      // Calculate used credits based on total purchased vs available
+      // For now, we'll show available credits as remaining and calculate used as (total - remaining)
+      // This is a temporary solution - we should track used credits separately in the future
+      const remainingCredits = Math.max(0, credits.total);
+      const totalPurchased = await getTotalPurchasedCredits(user.id);
+      const usedCredits = Math.max(0, totalPurchased - remainingCredits);
       
-      console.log('Found analysis purchases:', purchases);
-      
-      // Filter out purchases where all analyses have been used
-      const activePurchases = purchases.filter(purchase => {
-        const remaining = purchase.quantity - (purchase.used_count || 0);
-        return remaining > 0;
+      setAnalysisUsage({
+        used: usedCredits,
+        total: totalPurchased,
+        remaining: remainingCredits,
+        isTrial: credits.trial > 0
       });
-      
-      console.log('Active purchases with remaining analyses:', activePurchases);
-      
-      // Calculate total available analyses from active purchases
-      const totalAnalyses = activePurchases.reduce((sum, p) => {
-        const available = p.quantity - (p.used_count || 0);
-        console.log(`Purchase: ${p.quantity} total, ${p.used_count || 0} used, ${available} available`);
-        return sum + available;
-      }, 0);
-      
-      console.log('Total analyses available:', totalAnalyses);
-      
-      // Get used analyses count (all time)
-      console.log('Fetching used analyses count for user:', userId);
-      const { count: usedAnalyses = 0, error: usageError } = await supabase
-        .from('plant_analyses')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      
-      if (usageError) {
-        console.error('Error fetching usage data:', usageError);
-        throw usageError;
-      }
-      
-      console.log('Used analyses count:', usedAnalyses);
-      
-      // Determine if user is on trial
-      const isTrial = customerData?.trial_end_date && 
-                     new Date(customerData.trial_end_date) > new Date();
-      
-      console.log('Trial status:', { 
-        hasTrialEndDate: !!customerData?.trial_end_date,
-        trialEndDate: customerData?.trial_end_date,
-        isTrial,
-        now: new Date().toISOString()
-      });
-      
-      // If on trial, add trial analyses
-      const totalWithTrial = isTrial ? totalAnalyses + 5 : totalAnalyses;
-      
-      const usageData = {
-        used: usedAnalyses || 0,
-        total: totalWithTrial,
-        remaining: Math.max(0, totalWithTrial - (usedAnalyses || 0)),
-        isTrial
-      };
-      
-      console.log('Setting analysis usage data:', usageData);
-      setAnalysisUsage(usageData);
       
       setError(null);
     } catch (err) {
       console.error('Error in fetchSubscription:', err);
       setError('Failed to load subscription data: ' + (err.message || 'Unknown error'));
+      
+      // Reset to default values on error
+      setAnalysisUsage({
+        used: 0,
+        total: 0,
+        remaining: 0,
+        isTrial: false
+      });
     } finally {
       setSubscriptionLoading(false);
     }
   }, [user]);
   
-  // Initial fetch
-  useEffect(() => {
-    fetchSubscription();
-  }, [fetchSubscription]);
+  // Initial fetch and refresh on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchSubscription();
+    }, [fetchSubscription])
+  );
   
   const handleWebViewNav = (navState) => {
     const { url } = navState;
@@ -295,18 +233,28 @@ export default function ProfileScreen() {
   };
   
   const getStatusColor = (status) => {
-    switch (status) {
+    if (!status) return '#757575';
+    
+    const statusLower = status.toLowerCase();
+    
+    switch (statusLower) {
       case 'active':
-        return '#4CAF50';
+        return '#4CAF50'; // Green
       case 'trialing':
-        return '#2196F3';
+      case 'trial':
+        return '#2196F3'; // Blue
       case 'past_due':
       case 'unpaid':
-        return '#F44336';
+      case 'incomplete':
+      case 'incomplete_expired':
+        return '#F44336'; // Red
       case 'canceled':
-        return '#9E9E9E';
+      case 'cancelled':
+      case 'unsubscribed':
+        return '#9E9E9E'; // Gray
+      case 'inactive':
       default:
-        return '#757575';
+        return '#757575'; // Dark gray
     }
   };
   
@@ -444,14 +392,20 @@ export default function ProfileScreen() {
                 <View 
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: getStatusColor(subscription?.subscription_status) + '1A' }
+                    { 
+                      backgroundColor: getStatusColor(subscription?.subscription_status) + '1A',
+                      borderColor: getStatusColor(subscription?.subscription_status)
+                    }
                   ]}
                 >
                   <Text style={[
                     styles.statusText,
                     { color: getStatusColor(subscription?.subscription_status) }
                   ]}>
-                    {getStatusText(subscription?.subscription_status, subscription?.trial_end_date)}
+                    {subscription?.cancel_at_period_end 
+                      ? 'Active (Ending Soon)' 
+                      : getStatusText(subscription?.subscription_status, subscription?.trial_end_date)
+                    }
                   </Text>
                 </View>
               </View>
@@ -502,7 +456,21 @@ export default function ProfileScreen() {
 
         {/* Analysis Usage Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Analysis Usage</Text>
+          <View style={styles.analysisCardHeader}>
+            <Text style={styles.analysisCardTitle}>Analysis Usage</Text>
+            <TouchableOpacity 
+              onPress={fetchSubscription}
+              disabled={subscriptionLoading}
+              style={styles.refreshButton}
+            >
+              <MaterialIcons 
+                name="refresh" 
+                size={20} 
+                color="#4CAF50"
+                style={subscriptionLoading ? { opacity: 0.5 } : null}
+              />
+            </TouchableOpacity>
+          </View>
           {subscriptionLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#2E7D32" />
@@ -538,7 +506,6 @@ export default function ProfileScreen() {
               <Text style={styles.usageDetail}>
                 {analysisUsage.used} analyses used • {analysisUsage.remaining} remaining
               </Text>
-              
               <TouchableOpacity 
                 style={[styles.actionButton, styles.purchaseButton, { marginTop: 20 }]}
                 onPress={async () => {
@@ -690,14 +657,41 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  // Base card header style
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  // Specific style for analysis usage card header
+  analysisCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 4, // Vertical padding for better alignment of refresh button
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 16,
+    color: '#333',
+    marginBottom: 15, // Keep bottom margin for regular card titles
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  },
+  // Specific style for analysis usage card title
+  analysisCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 0, // No bottom margin for analysis card title
+    paddingVertical: 4, // Vertical padding for better alignment
+  },
+  refreshButton: {
+    padding: 4,
+    marginLeft: 8, // Add some spacing between the title and the button
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   analysisUsageContainer: {
     padding: 20,
@@ -755,8 +749,9 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
     backgroundColor: '#E8F5E9',
   },
   statusText: {
@@ -782,7 +777,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 8,
-    marginTop: 16,
+    marginTop: 8,
   },
   noticeText: {
     marginLeft: 8,
