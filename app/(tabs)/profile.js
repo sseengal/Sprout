@@ -123,22 +123,41 @@ export default function ProfileScreen() {
       console.log('Fetching analysis purchases...');
       const { data: purchases, error: purchaseError } = await supabase
         .from('analysis_purchases')
-        .select('quantity, used_count')
+        .select('quantity, used_count, expires_at, created_at')
         .eq('user_id', userId)
-        .gt('expires_at', new Date().toISOString())
-        .gt('quantity', supabase.rpc('COALESCE(used_count, 0)'));
+        .gte('expires_at', new Date().toISOString());
       
       if (purchaseError) {
-        console.log('No analysis purchases found for user');
+        console.error('Error fetching analysis purchases:', purchaseError);
         return [];
       }
       
+      if (!purchases || purchases.length === 0) {
+        console.log('No active analysis purchases found for user');
+        return [];
+      }
       
-      // Calculate total available analyses
-      const totalAnalyses = purchases.reduce((sum, p) => 
-        sum + (p.quantity - (p.used_count || 0)), 0);
+      console.log('Found analysis purchases:', purchases);
+      
+      // Filter out purchases where all analyses have been used
+      const activePurchases = purchases.filter(purchase => {
+        const remaining = purchase.quantity - (purchase.used_count || 0);
+        return remaining > 0;
+      });
+      
+      console.log('Active purchases with remaining analyses:', activePurchases);
+      
+      // Calculate total available analyses from active purchases
+      const totalAnalyses = activePurchases.reduce((sum, p) => {
+        const available = p.quantity - (p.used_count || 0);
+        console.log(`Purchase: ${p.quantity} total, ${p.used_count || 0} used, ${available} available`);
+        return sum + available;
+      }, 0);
+      
+      console.log('Total analyses available:', totalAnalyses);
       
       // Get used analyses count (all time)
+      console.log('Fetching used analyses count for user:', userId);
       const { count: usedAnalyses = 0, error: usageError } = await supabase
         .from('plant_analyses')
         .select('*', { count: 'exact', head: true })
@@ -149,19 +168,31 @@ export default function ProfileScreen() {
         throw usageError;
       }
       
+      console.log('Used analyses count:', usedAnalyses);
+      
       // Determine if user is on trial
       const isTrial = customerData?.trial_end_date && 
                      new Date(customerData.trial_end_date) > new Date();
       
+      console.log('Trial status:', { 
+        hasTrialEndDate: !!customerData?.trial_end_date,
+        trialEndDate: customerData?.trial_end_date,
+        isTrial,
+        now: new Date().toISOString()
+      });
+      
       // If on trial, add trial analyses
       const totalWithTrial = isTrial ? totalAnalyses + 5 : totalAnalyses;
       
-      setAnalysisUsage({
+      const usageData = {
         used: usedAnalyses || 0,
         total: totalWithTrial,
         remaining: Math.max(0, totalWithTrial - (usedAnalyses || 0)),
         isTrial
-      });
+      };
+      
+      console.log('Setting analysis usage data:', usageData);
+      setAnalysisUsage(usageData);
       
       setError(null);
     } catch (err) {
