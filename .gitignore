@@ -45,13 +45,14 @@ dist-ssr/
 web-build/
 web-report/
 
-# macOS
-.DS_Store
-
-# Environment variables
+# Environment files
 .env
 .env.*
 !.env.example
+
+# macOS
+.DS_Store
+
 
 # Supabase
 supabase/functions/.env
