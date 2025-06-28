@@ -1,4 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import Stripe from 'https://esm.sh/stripe@12.6.0?target=deno';
+
+// Initialize Stripe
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+  apiVersion: '2023-08-16',
+});
 
 // Enhanced logger function
 const log = (message: string, data: any = {}) => {
@@ -19,19 +25,93 @@ const log = (message: string, data: any = {}) => {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Handle webhook events
+async function handleWebhookEvent(req: Request) {
+  try {
+    const signature = req.headers.get('stripe-signature') || '';
+    const body = await req.text();
+    
+    let event;
+    try {
+      event = await stripe.webhooks.constructEventAsync(
+        body,
+        signature,
+        Deno.env.get('STRIPE_WEBHOOK_SECRET') || '',
+        undefined,
+        Stripe.createSubtleCryptoProvider()
+      );
+    } catch (err) {
+      console.error('Webhook signature verification failed:', err);
+      return new Response('Webhook Error', { status: 400 });
+    }
+
+    log('Webhook event received', { type: event.type });
+
+    // Handle the checkout.session.completed event for trials
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as any;
+      const { user_id, is_trial } = session.metadata || {};
+
+      if (is_trial === 'true' && user_id) {
+        log('Handling trial subscription for user', { userId: user_id });
+        
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        
+        if (!supabaseUrl || !supabaseKey) {
+          throw new Error('Missing Supabase configuration');
+        }
+
+        // Call the start_trial function
+        const trialResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/start_trial`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'params=single-object'
+          },
+          body: JSON.stringify({ p_user_id: user_id })
+        });
+
+        const trialResult = await trialResponse.json();
+        log('Trial start result', { 
+          status: trialResponse.status,
+          result: trialResult 
+        });
+
+        if (!trialResponse.ok || (trialResult && trialResult.success === false)) {
+          throw new Error(trialResult?.message || 'Failed to start trial');
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    console.error('Webhook handler error:', err);
+    return new Response(JSON.stringify({ 
+      error: 'Webhook handler failed', 
+      details: err.message 
+    }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
+  }
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+// Handle creating a checkout session
+async function handleCreateCheckoutSession(req: Request) {
   try {
     const { user_id, user_email, plan_id, plan_name, amount, currency, interval } = await req.json();
     if (!user_id || !user_email || !plan_id || !amount) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
     }
     
-    // Check if user is eligible for a free trial
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
@@ -40,43 +120,13 @@ serve(async (req) => {
       throw new Error('Missing required environment variables');
     }
     
-    // Check if user has an active subscription or has used a trial before
-    const trialCheckUrl = `${supabaseUrl}/rest/v1/customers?email=eq.${encodeURIComponent(user_email)}&select=id,subscription_status,trial_start_date`;
-    const trialCheck = await fetch(trialCheckUrl, {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Simplified check - we'll always require payment method for trials
+    const isTrialFlow = plan_id === 'trial_plan';
     
-    if (!trialCheck.ok) {
-      const error = await trialCheck.text();
-      throw new Error(`Failed to check trial eligibility: ${error}`);
-    }
-    
-    const [customerData] = await trialCheck.json();
-    
-    // Check various subscription states
-    const hasActiveSubscription = customerData?.subscription_status === 'active';
-    const isInTrial = customerData?.subscription_status === 'trialing';
-    const hasUsedTrialBefore = !!customerData?.trial_start_date;
-    
-    // A user is eligible for a trial if:
-    // 1. They don't have an active subscription AND
-    // 2. They're not currently in a trial AND
-    // 3. They've never started a trial before
-    const isEligibleForTrial = !hasActiveSubscription && 
-                              !isInTrial && 
-                              !hasUsedTrialBefore;
-    
-    log('Trial eligibility check', {
+    log('Checkout session request', {
       user_email,
-      hasActiveSubscription,
-      isInTrial,
-      hasUsedTrialBefore,
-      isEligibleForTrial,
-      currentStatus: customerData?.subscription_status || 'unknown'
+      plan_id,
+      isTrialFlow
     });
     // 1. Create or fetch Stripe customer
     let customer;
@@ -278,7 +328,7 @@ serve(async (req) => {
     // 4. Create checkout session with trial if eligible
     let session;
     try {
-      let sessionParams: Record<string, any> = {
+      const sessionParams: Record<string, any> = {
         customer: customer.id,
         payment_method_types: ['card'],
         line_items: [{
@@ -291,16 +341,15 @@ serve(async (req) => {
         metadata: {
           user_id,
           plan_id,
-          is_trial: isEligibleForTrial ? 'true' : 'false'
+          is_trial: isTrialFlow ? 'true' : 'false'
         },
         subscription_data: {
           metadata: {
             user_id,
             plan_id,
-            is_trial: isEligibleForTrial ? 'true' : 'false'
+            is_trial: isTrialFlow ? 'true' : 'false'
           },
-          // Only set trial period if eligible
-          ...(isEligibleForTrial && {
+          ...(isTrialFlow && {
             trial_period_days: 14,
             trial_settings: {
               end_behavior: {
@@ -309,15 +358,15 @@ serve(async (req) => {
             }
           })
         },
-        payment_method_collection: isEligibleForTrial ? 'if_required' : 'always',
+        payment_method_collection: 'always', // Always require payment method for trials
         allow_promotion_codes: true,
       };
 
       log('Creating Stripe checkout session', {
         customerId: customer.id,
         priceId: price.id,
-        isEligibleForTrial,
-        trialDays: isEligibleForTrial ? 14 : 0,
+        isTrialFlow,
+        trialDays: isTrialFlow ? 14 : 0,
         sessionParams: {
           ...sessionParams,
           // Don't log the entire customer object
@@ -370,8 +419,8 @@ serve(async (req) => {
     }
     return new Response(JSON.stringify({ 
       url: session.url,
-      isTrial: isEligibleForTrial,
-      trialDays: isEligibleForTrial ? 14 : 0
+      isTrial: isTrialFlow,
+      trialDays: isTrialFlow ? 14 : 0
     }), { 
       status: 200, 
       headers: {
@@ -380,6 +429,32 @@ serve(async (req) => {
       } 
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message || 'Internal error', details: String(err) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ 
+      error: err.message || 'Internal error', 
+      details: String(err) 
+    }), { 
+      status: 500, 
+      headers: { 
+        ...corsHeaders,
+        'Content-Type': 'application/json' 
+      } 
+    });
   }
+}
+
+// Main request handler
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Check if this is a webhook event
+  const isWebhook = req.headers.get('stripe-signature');
+  if (isWebhook) {
+    return handleWebhookEvent(req);
+  }
+
+  // Otherwise, handle as a checkout session creation request
+  return handleCreateCheckoutSession(req);
 });

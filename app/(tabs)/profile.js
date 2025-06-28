@@ -88,10 +88,13 @@ export default function ProfileScreen() {
       console.log('Customer data:', customerData);
       console.log('Available credits:', credits);
       
+      // Check if user is on trial
+      const isOnTrial = customerData?.trial_end_date && new Date(customerData.trial_end_date) > new Date();
+      
       // Update the subscription state with customer data if available
       if (customerData) {
         setSubscription({
-          subscription_status: isSubscribed ? 'active' : 'inactive',
+          subscription_status: isOnTrial ? 'trialing' : (isSubscribed ? 'active' : 'inactive'),
           plan_type: customerData.plan_type,
           billing_interval: customerData.billing_interval,
           subscription_start_date: customerData.subscription_start_date,
@@ -102,7 +105,7 @@ export default function ProfileScreen() {
         });
       } else {
         setSubscription({
-          subscription_status: isSubscribed ? 'active' : 'inactive',
+          subscription_status: credits.trial > 0 ? 'trialing' : (isSubscribed ? 'active' : 'inactive'),
           trial_end_date: credits.trial > 0 ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() : null
         });
       }

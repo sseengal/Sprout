@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -64,6 +65,7 @@ const PLANS = {
 };
 
 export default function PaymentScreen() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('monthly');
   const [showWebView, setShowWebView] = useState(false);
@@ -77,33 +79,33 @@ export default function PaymentScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Please sign in to continue');
       
-      // For trial, we'll handle it differently
+      // For trial, use Stripe checkout with trial parameters
       if (plan.isTrial) {
-        const { data, error } = await supabase
-          .rpc('start_trial', { p_user_id: user.id });
-          
-        if (error) throw error;
-        
-        if (data && data.success === false) {
-          // If trial couldn't be started (e.g., already has an active trial)
-          Alert.alert('Trial Not Available', data.message || 'You already have an active or used trial.');
-          return;
-        }
-        
-        Alert.alert(
-          'Trial Started!', 
-          'Your 14-day trial with 5 free analyses has been activated. Start analyzing your plants now!',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate back to home or analysis screen
-                router.replace('/(tabs)/');
-              }
+        try {
+          // Call the Edge Function to create a checkout session
+          const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke('stripe-create-checkout-session', {
+            body: {
+              user_id: user.id,
+              user_email: user.email,
+              plan_id: 'trial_plan', // This should match your Stripe product
+              plan_name: '14-Day Free Trial',
+              amount: 0, // No charge for trial
+              currency: 'inr',
+              interval: 'month' // This will be the billing interval after trial
             }
-          ]
-        );
-        return;
+          });
+          
+          if (checkoutError) throw checkoutError;
+          
+          // Open the checkout URL in WebView
+          setCheckoutUrl(checkoutData.url);
+          setShowWebView(true);
+          return;
+          
+        } catch (error) {
+          console.error('Trial checkout error:', error);
+          throw new Error(error.message || 'Failed to start trial. Please try again.');
+        }
       }
       
       // For paid plans, use Stripe checkout
@@ -130,15 +132,40 @@ export default function PaymentScreen() {
 
   // Handle deep links for payment success/cancel
   useEffect(() => {
-    const handleDeepLink = ({ url }) => {
+    const handleDeepLink = async ({ url }) => {
       if (!url) return;
       
+      setShowWebView(false);
+      
       if (url.includes('payment/success')) {
-        setShowWebView(false);
-        Alert.alert('Success', 'Your subscription is now active!');
+        // Show success message
+        Alert.alert(
+          'Success!', 
+          'Your trial has been activated! You now have 5 free analyses to use during your 14-day trial period.',
+          [
+            {
+              text: 'Get Started',
+              onPress: () => {
+                // Navigate to home screen
+                router.replace('/(tabs)');
+              }
+            }
+          ]
+        );
       } else if (url.includes('payment/cancel')) {
-        setShowWebView(false);
-        Alert.alert('Cancelled', 'Your subscription was cancelled');
+        // Show cancellation message
+        Alert.alert(
+          'Cancelled', 
+          'Your trial was not activated. You can try again anytime.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Just dismiss the alert
+              }
+            }
+          ]
+        );
       }
     };
 
@@ -147,21 +174,25 @@ export default function PaymentScreen() {
     
     // Clean up
     return () => {
-      subscription.remove();
+      subscription?.remove();
     };
-  }, []);
+  }, [router]);
 
   const handleWebViewNav = ({ url }) => {
     if (!url) return;
     
-    // This will now be handled by the deep link handler
+    // Check for our custom URL scheme
     if (url.startsWith('sprout://payment/')) {
       // The deep link handler will take care of this
       return;
-    } else if (url.includes('success')) {
-      Alert.alert('Success', 'Subscription activated successfully!');
+    }
+    
+    // Handle Stripe's success/cancel URLs if they somehow bypass the deep link handler
+    if (url.includes('success') || url.includes('checkout/success')) {
+      Linking.openURL('sprout://payment/success');
       setShowWebView(false);
-    } else if (url.includes('cancel')) {
+    } else if (url.includes('cancel') || url.includes('checkout/cancel')) {
+      Linking.openURL('sprout://payment/cancel');
       setShowWebView(false);
     }
   };
@@ -265,7 +296,9 @@ export default function PaymentScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.subscribeButtonText}>
-                Subscribe {selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}
+                {selectedPlan === 'trial' 
+                  ? 'Start Free Trial' 
+                  : `Subscribe ${selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}`}
               </Text>
             )}
           </TouchableOpacity>
