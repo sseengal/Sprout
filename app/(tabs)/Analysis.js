@@ -8,7 +8,9 @@ import ConfidenceBadge from '../../components/plant/ConfidenceBadge';
 import NoteContainer from '../../components/plant/NoteContainer';
 import PlantInfoSection from '../../components/plant/PlantInfoSection';
 import SaveButton from '../../components/plant/SaveButton';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
+import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
 import { extractPlantInfo } from '../../utils/plantDetails';
 
 import { getPlantInfo } from '../../utils/geminiService';
@@ -53,6 +55,9 @@ export default function AnalysisScreen() {
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiError, setGeminiError] = useState(null);
   const [geminiPlantName, setGeminiPlantName] = useState('');
+  const { user } = useAuth();
+  const [credits, setCredits] = useState({ total: 0, trial: 0, subscription: 0, purchase: 0 });
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 
   // Helper: get top PlantNet suggestion name
   const getPlantNetTopName = () => {
@@ -65,20 +70,73 @@ export default function AnalysisScreen() {
 
 
 
-  // Fetch Gemini info on mount/plant change
+  // Handle plant analysis on mount/plant change
   useEffect(() => {
-    const fetchGemini = async () => {
+    const handlePlantAnalysis = async () => {
+      // Skip if this is a saved view
+      if (searchParams?.isSavedView) {
+        // Use the saved Gemini info if available
+        if (searchParams.savedGeminiInfo) {
+          setGeminiInfo(JSON.parse(searchParams.savedGeminiInfo));
+        } else {
+          setGeminiError('No saved plant information available.');
+        }
+        setGeminiLoading(false);
+        return;
+      }
+
+      // This is a new analysis - proceed with API calls
       setGeminiLoading(true);
       setGeminiError(null);
       setGeminiInfo(null);
+      
       try {
         const plantName = getPlantNetTopName();
         setGeminiPlantName(plantName);
+        
         if (!plantName) {
           setGeminiError('Could not determine a valid plant name from PlantNet. Please try another image.');
           return;
         }
-        // Use the Gemini API with the top PlantNet suggestion
+
+        // Only record analysis for new identifications
+        if (user?.id) {
+          try {
+            // Check if user has enough credits
+            const creditCheck = await getAvailableCredits(user.id);
+            if (creditCheck.total <= 0) {
+              Alert.alert(
+                'Limit Reached', 
+                'You\'ve used all your available analyses. Please upgrade your plan for more.',
+                [{ text: 'OK' }]
+              );
+              setGeminiLoading(false);
+              return;
+            }
+
+            // Record the analysis
+            const result = await useAnalysis(user.id);
+            
+            // Update local credits state
+            if (result.success) {
+              const newCredits = await getAvailableCredits(user.id);
+              setCredits(newCredits);
+            }
+          } catch (error) {
+            console.error('Error recording analysis:', error);
+            if (error?.error === 'ANALYSIS_LIMIT_REACHED') {
+              Alert.alert(
+                'Limit Reached', 
+                `You've used all your monthly analyses. ${error.message}`,
+                [{ text: 'OK' }]
+              );
+              setGeminiLoading(false);
+              return;
+            }
+          }
+        }
+
+        // Only fetch Gemini info if we don't have it already
         const info = await getPlantInfo(plantName);
         if (!info || Object.keys(info).length === 0) {
           setGeminiError('No detailed plant information could be found for this analysis.');
@@ -87,15 +145,15 @@ export default function AnalysisScreen() {
         }
         setGeminiInfo(info);
       } catch (err) {
-        setGeminiError(err.message || 'Failed to fetch Gemini info');
+        setGeminiError(err.message || 'Failed to fetch plant information');
         setGeminiInfo(null);
       } finally {
         setGeminiLoading(false);
       }
     };
-    fetchGemini();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name]);
+
+    handlePlantAnalysis();
+  }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name, searchParams?.isSavedView]);
 
   // Only show plant info if we have Gemini data
   const plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
@@ -135,7 +193,8 @@ export default function AnalysisScreen() {
         plantData: {
           ...plantData,
           commonName,
-          scientificName
+          scientificName,
+          geminiInfo: geminiInfo // Save the Gemini info for later use
         },
         imageUri: imageUri || '',
         id: plantId,
@@ -145,9 +204,41 @@ export default function AnalysisScreen() {
     }
   };
 
+  // Load credits on mount and when user changes
+  useEffect(() => {
+    const loadCredits = async () => {
+      if (!user?.id) return;
+      
+      setIsLoadingCredits(true);
+      try {
+        const creditData = await getAvailableCredits(user.id);
+        setCredits(creditData);
+      } catch (error) {
+        console.error('Error loading credits:', error);
+      } finally {
+        setIsLoadingCredits(false);
+      }
+    };
+
+    loadCredits();
+  }, [user?.id]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f7f0' }} edges={['top']}>
       <ScrollView style={{ flex: 1, padding: 16 }}>
+        <View style={styles.headerContainer}>
+          <View style={styles.usageContainer}>
+            <Text style={styles.usageLabel}>Analyses Left</Text>
+            <Text style={styles.usageCount}>
+              {!isLoadingCredits ? credits.total : '...'}
+            </Text>
+            {credits.total === 0 && (
+              <Text style={styles.upgradeText}>
+                Upgrade for more analyses
+              </Text>
+            )}
+          </View>
+        </View>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
         ) : null}
@@ -213,6 +304,43 @@ export default function AnalysisScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 16,
+  },
+  usageContainer: {
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+    minWidth: 120,
+    justifyContent: 'space-between',
+  },
+  usageLabel: {
+    fontSize: 14,
+    color: '#2e7d32',
+    marginRight: 6,
+    fontWeight: '500',
+  },
+  usageCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1b5e20',
+    minWidth: 24,
+    textAlign: 'center',
+    marginLeft: 4,
+  },
+  upgradeText: {
+    fontSize: 12,
+    color: '#ff6d00',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',

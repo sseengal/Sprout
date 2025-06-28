@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -22,6 +23,20 @@ const CARD_WIDTH = width - (CARD_MARGIN * 3);
 
 // Subscription plans
 const PLANS = {
+  trial: {
+    id: 'trial',
+    name: 'Free Trial',
+    amount: 0,
+    currency: 'inr',
+    interval: 'none',
+    isTrial: true,
+    features: [
+      '5 free analyses',
+      '14 days trial period',
+      'No credit card required',
+      'Cancel anytime'
+    ]
+  },
   monthly: {
     id: 'price_monthly',
     name: 'Monthly',
@@ -50,6 +65,7 @@ const PLANS = {
 };
 
 export default function PaymentScreen() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('monthly');
   const [showWebView, setShowWebView] = useState(false);
@@ -63,6 +79,36 @@ export default function PaymentScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Please sign in to continue');
       
+      // For trial, use Stripe checkout with trial parameters
+      if (plan.isTrial) {
+        try {
+          // Call the Edge Function to create a checkout session
+          const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke('stripe-create-checkout-session', {
+            body: {
+              user_id: user.id,
+              user_email: user.email,
+              plan_id: 'trial_plan', // This should match your Stripe product
+              plan_name: '14-Day Free Trial',
+              amount: 0, // No charge for trial
+              currency: 'inr',
+              interval: 'month' // This will be the billing interval after trial
+            }
+          });
+          
+          if (checkoutError) throw checkoutError;
+          
+          // Open the checkout URL in WebView
+          setCheckoutUrl(checkoutData.url);
+          setShowWebView(true);
+          return;
+          
+        } catch (error) {
+          console.error('Trial checkout error:', error);
+          throw new Error(error.message || 'Failed to start trial. Please try again.');
+        }
+      }
+      
+      // For paid plans, use Stripe checkout
       const checkoutUrl = await createStripeCheckoutSession({
         user_id: user.id,
         user_email: user.email,
@@ -86,15 +132,40 @@ export default function PaymentScreen() {
 
   // Handle deep links for payment success/cancel
   useEffect(() => {
-    const handleDeepLink = ({ url }) => {
+    const handleDeepLink = async ({ url }) => {
       if (!url) return;
       
+      setShowWebView(false);
+      
       if (url.includes('payment/success')) {
-        setShowWebView(false);
-        Alert.alert('Success', 'Your subscription is now active!');
+        // Show success message
+        Alert.alert(
+          'Success!', 
+          'Your trial has been activated! You now have 5 free analyses to use during your 14-day trial period.',
+          [
+            {
+              text: 'Get Started',
+              onPress: () => {
+                // Navigate to home screen
+                router.replace('/(tabs)');
+              }
+            }
+          ]
+        );
       } else if (url.includes('payment/cancel')) {
-        setShowWebView(false);
-        Alert.alert('Cancelled', 'Your subscription was cancelled');
+        // Show cancellation message
+        Alert.alert(
+          'Cancelled', 
+          'Your trial was not activated. You can try again anytime.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Just dismiss the alert
+              }
+            }
+          ]
+        );
       }
     };
 
@@ -103,21 +174,25 @@ export default function PaymentScreen() {
     
     // Clean up
     return () => {
-      subscription.remove();
+      subscription?.remove();
     };
-  }, []);
+  }, [router]);
 
   const handleWebViewNav = ({ url }) => {
     if (!url) return;
     
-    // This will now be handled by the deep link handler
+    // Check for our custom URL scheme
     if (url.startsWith('sprout://payment/')) {
       // The deep link handler will take care of this
       return;
-    } else if (url.includes('success')) {
-      Alert.alert('Success', 'Subscription activated successfully!');
+    }
+    
+    // Handle Stripe's success/cancel URLs if they somehow bypass the deep link handler
+    if (url.includes('success') || url.includes('checkout/success')) {
+      Linking.openURL('sprout://payment/success');
       setShowWebView(false);
-    } else if (url.includes('cancel')) {
+    } else if (url.includes('cancel') || url.includes('checkout/cancel')) {
+      Linking.openURL('sprout://payment/cancel');
       setShowWebView(false);
     }
   };
@@ -151,13 +226,15 @@ export default function PaymentScreen() {
   const PlanCard = ({ planKey, isSelected }) => {
     const plan = PLANS[planKey];
     const isYearly = planKey === 'yearly';
+    const isTrial = planKey === 'trial';
     
     return (
       <TouchableOpacity
         style={[
           styles.planCard,
           isSelected && styles.planCardSelected,
-          isYearly && styles.popularPlan
+          isYearly && styles.popularPlan,
+          isTrial && styles.trialPlan
         ]}
         onPress={() => setSelectedPlan(planKey)}
         activeOpacity={0.8}
@@ -169,8 +246,8 @@ export default function PaymentScreen() {
         )}
         <Text style={styles.planName}>{plan.name}</Text>
         <Text style={styles.planPrice}>
-          {formatPrice(plan.amount)}
-          <Text style={styles.planInterval}>/{plan.interval}</Text>
+          {isTrial ? 'Free' : formatPrice(plan.amount)}
+          {!isTrial && <Text style={styles.planInterval}>/{plan.interval}</Text>}
         </Text>
         {isYearly && (
           <Text style={styles.discountText}>Save 20% vs monthly</Text>
@@ -198,6 +275,7 @@ export default function PaymentScreen() {
             </View>
             
             <View style={styles.plansContainer}>
+              <PlanCard planKey="trial" isSelected={selectedPlan === 'trial'} />
               <PlanCard planKey="monthly" isSelected={selectedPlan === 'monthly'} />
               <PlanCard planKey="yearly" isSelected={selectedPlan === 'yearly'} />
             </View>
@@ -218,7 +296,9 @@ export default function PaymentScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.subscribeButtonText}>
-                Subscribe {selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}
+                {selectedPlan === 'trial' 
+                  ? 'Start Free Trial' 
+                  : `Subscribe ${selectedPlan === 'yearly' ? 'Annually' : 'Monthly'}`}
               </Text>
             )}
           </TouchableOpacity>
@@ -296,6 +376,11 @@ const styles = StyleSheet.create({
     borderColor: '#6366f1',
     borderWidth: 2,
     backgroundColor: '#f8fafc',
+  },
+  trialPlan: {
+    borderTopColor: '#10b981',
+    borderTopWidth: 3,
+    paddingTop: 28,
   },
   popularPlan: {
     borderTopWidth: 3,

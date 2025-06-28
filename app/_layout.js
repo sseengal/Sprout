@@ -1,7 +1,8 @@
 import * as Linking from 'expo-linking';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, View, Alert } from 'react-native';
+import { supabase } from '../lib/supabase';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SavedPlantsProvider } from '../contexts/SavedPlantsContext';
 
@@ -21,6 +22,7 @@ function AuthLayout() {
   const logger = useMemo(() => createLogger(instanceId), [instanceId]);
   
   const { user, loading, error, handleAuthCallback } = useAuth();
+  const [subscription, setSubscription] = useState(null);
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -52,6 +54,28 @@ function AuthLayout() {
   // Check if the current route is the email confirmation screen - check both possible paths
   const isEmailConfirmationScreen = pathname === '/(auth)/email-confirmation' || pathname.includes('/email-confirmation');
 
+  // Handle payment deep links
+  const handlePaymentLink = useCallback(async (url) => {
+    try {
+      if (url.includes('payment/success')) {
+        Alert.alert('Success', 'Your purchase was successful!');
+        // Refresh subscription data if user is logged in
+        if (user?.id) {
+          const { data } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+          if (data) setSubscription(data);
+        }
+      } else if (url.includes('payment/cancel')) {
+        Alert.alert('Cancelled', 'Your purchase was cancelled.');
+      }
+    } catch (error) {
+      logger('Error handling payment link:', error);
+    }
+  }, [user?.id]);
+
   // Handle deep links
   const handleDeepLink = useCallback(async (event) => {
     if (!event?.url || !isMounted.current) return;
@@ -68,11 +92,13 @@ function AuthLayout() {
     try {
       if (url.includes('auth/callback') || url.includes('access_token') || url.includes('error=')) {
         await handleAuthCallback(url);
+      } else if (url.includes('payment/')) {
+        await handlePaymentLink(url);
       }
     } catch (error) {
       logger('Error handling deep link:', error);
     }
-  }, [handleAuthCallback, logger]);
+  }, [handleAuthCallback, handlePaymentLink, logger]);
 
   // Set up deep linking
   useEffect(() => {
@@ -236,10 +262,10 @@ function AuthLayout() {
 
 export default function RootLayout() {
   return (
-    <SavedPlantsProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <SavedPlantsProvider>
         <AuthLayout />
-      </AuthProvider>
-    </SavedPlantsProvider>
+      </SavedPlantsProvider>
+    </AuthProvider>
   );
 }

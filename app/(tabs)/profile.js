@@ -1,9 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useAuth } from '../../contexts/AuthContext';
+import { purchaseAnalyses } from '../../lib/analyses';
 import { supabase } from '../../lib/supabase';
+import { getAvailableCredits, hasActiveSubscription, getTotalPurchasedCredits } from '../../lib/analysisCredits';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -11,35 +14,160 @@ export default function ProfileScreen() {
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [isUnsubscribing, setIsUnsubscribing] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [showWebView, setShowWebView] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
   const [error, setError] = useState(null);
+  const [analysisUsage, setAnalysisUsage] = useState({
+    used: 0,
+    total: 0,
+    remaining: 0,
+    isTrial: false
+  });
   
-  // Fetch subscription data
+  // Handle deep links for payment success/cancel
   useEffect(() => {
-    if (!user) return;
+    const handleDeepLink = (event) => {
+      const url = event?.url;
+      if (!url) return;
+      
+      console.log('Deep link received:', url);
+      
+      if (url.includes('payment/success')) {
+        setShowWebView(false);
+        // Refresh subscription data
+        fetchSubscription();
+        Alert.alert('Success', 'Your purchase was successful!');
+      } else if (url.includes('payment/cancel')) {
+        setShowWebView(false);
+        Alert.alert('Cancelled', 'Your purchase was cancelled');
+      }
+    };
+
+    // Get the initial URL if the app was opened from a link
+    Linking.getInitialURL().then(url => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    // Listen for incoming deep links
+    const subscription = Linking.addEventListener('url', handleDeepLink);
     
-    const fetchSubscription = async () => {
-      try {
-        setSubscriptionLoading(true);
-        const { data, error: fetchError } = await supabase
+    // Clean up
+    return () => {
+      subscription.remove();
+    };
+  }, [user?.id]);
+
+  // Fetch subscription and analysis usage data
+  const fetchSubscription = useCallback(async () => {
+    if (!user?.id) {
+      console.log('No user ID available');
+      return;
+    }
+    
+    try {
+      setSubscriptionLoading(true);
+      console.log('Fetching subscription and analysis data for user:', user.id);
+      
+      // Use the utility functions to get the data
+      const [isSubscribed, credits, customerData] = await Promise.all([
+        hasActiveSubscription(user.id),
+        getAvailableCredits(user.id),
+        // Get customer data for additional subscription details
+        supabase
           .from('customers')
           .select('*')
           .eq('user_id', user.id)
-          .single();
-          
-        if (fetchError) throw fetchError;
-        
-        setSubscription(data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching subscription:', err);
-        setError('Failed to load subscription data');
-      } finally {
-        setSubscriptionLoading(false);
+          .single()
+          .then(({ data }) => data)
+      ]);
+      
+      console.log('Subscription status:', isSubscribed ? 'Active' : 'Not active');
+      console.log('Customer data:', customerData);
+      console.log('Available credits:', credits);
+      
+      // Check if user is on trial
+      const isOnTrial = customerData?.trial_end_date && new Date(customerData.trial_end_date) > new Date();
+      
+      // Update the subscription state with customer data if available
+      if (customerData) {
+        setSubscription({
+          subscription_status: isOnTrial ? 'trialing' : (isSubscribed ? 'active' : 'inactive'),
+          plan_type: customerData.plan_type,
+          billing_interval: customerData.billing_interval,
+          subscription_start_date: customerData.subscription_start_date,
+          subscription_end_date: customerData.subscription_end_date,
+          next_billing_date: customerData.next_billing_date,
+          cancel_at_period_end: customerData.cancel_at_period_end,
+          trial_end_date: customerData.trial_end_date
+        });
+      } else {
+        setSubscription({
+          subscription_status: credits.trial > 0 ? 'trialing' : (isSubscribed ? 'active' : 'inactive'),
+          trial_end_date: credits.trial > 0 ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() : null
+        });
       }
-    };
-    
-    fetchSubscription();
+      
+      // Update analysis usage state
+      // Calculate used credits based on total purchased vs available
+      // For now, we'll show available credits as remaining and calculate used as (total - remaining)
+      // This is a temporary solution - we should track used credits separately in the future
+      const remainingCredits = Math.max(0, credits.total);
+      const totalPurchased = await getTotalPurchasedCredits(user.id);
+      const usedCredits = Math.max(0, totalPurchased - remainingCredits);
+      
+      setAnalysisUsage({
+        used: usedCredits,
+        total: totalPurchased,
+        remaining: remainingCredits,
+        isTrial: credits.trial > 0
+      });
+      
+      setError(null);
+    } catch (err) {
+      console.error('Error in fetchSubscription:', err);
+      setError('Failed to load subscription data: ' + (err.message || 'Unknown error'));
+      
+      // Reset to default values on error
+      setAnalysisUsage({
+        used: 0,
+        total: 0,
+        remaining: 0,
+        isTrial: false
+      });
+    } finally {
+      setSubscriptionLoading(false);
+    }
   }, [user]);
+  
+  // Initial fetch and refresh on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchSubscription();
+    }, [fetchSubscription])
+  );
+  
+  const handleWebViewNav = (navState) => {
+    const { url } = navState;
+    if (!url) return;
+    
+    console.log('WebView navigation:', url);
+    
+    // Handle success/cancel URLs directly in the WebView
+    if (url.includes('/payment/success') || url.includes('payment/success')) {
+      console.log('Payment successful, closing WebView');
+      setShowWebView(false);
+      // Refresh subscription data
+      fetchSubscription();
+      Alert.alert('Success', 'Your purchase was successful!');
+    } else if (url.includes('/payment/cancel') || url.includes('payment/cancel')) {
+      console.log('Payment cancelled, closing WebView');
+      setShowWebView(false);
+      Alert.alert('Cancelled', 'Your purchase was cancelled');
+    }
+  };
   
   const handleSignOut = async () => {
     try {
@@ -108,18 +236,28 @@ export default function ProfileScreen() {
   };
   
   const getStatusColor = (status) => {
-    switch (status) {
+    if (!status) return '#757575';
+    
+    const statusLower = status.toLowerCase();
+    
+    switch (statusLower) {
       case 'active':
-        return '#4CAF50';
+        return '#4CAF50'; // Green
       case 'trialing':
-        return '#2196F3';
+      case 'trial':
+        return '#2196F3'; // Blue
       case 'past_due':
       case 'unpaid':
-        return '#F44336';
+      case 'incomplete':
+      case 'incomplete_expired':
+        return '#F44336'; // Red
       case 'canceled':
-        return '#9E9E9E';
+      case 'cancelled':
+      case 'unsubscribed':
+        return '#9E9E9E'; // Gray
+      case 'inactive':
       default:
-        return '#757575';
+        return '#757575'; // Dark gray
     }
   };
   
@@ -150,6 +288,59 @@ export default function ProfileScreen() {
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color="#2E7D32" />
       </View>
+    );
+  }
+
+  // Show WebView when in payment flow
+  if (showWebView) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <WebView
+          source={{ uri: checkoutUrl }}
+          style={styles.webView}
+          onNavigationStateChange={handleWebViewNav}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.log('WebView error:', nativeEvent);
+            
+            // Ignore navigation errors for success/cancel URLs and our custom domain
+            if (nativeEvent.url && 
+                (nativeEvent.url.includes('payment/success') || 
+                 nativeEvent.url.includes('payment/cancel') ||
+                 nativeEvent.url.includes('sprout-app.com'))) {
+              console.log('Ignoring navigation error for URL:', nativeEvent.url);
+              return;
+            }
+            
+            // Only show error for actual connection issues
+            if (nativeEvent.description && (
+                nativeEvent.description.includes('Could not connect to the server') ||
+                nativeEvent.description.includes('A server with the specified hostname could not be found') ||
+                nativeEvent.description.includes('The Internet connection appears to be offline')
+            )) {
+              console.log('Connection error detected, closing WebView');
+              setShowWebView(false);
+              Alert.alert('Connection Error', 'Could not connect to the payment server. Please check your internet connection and try again.');
+            } else {
+              console.log('Non-critical WebView error, ignoring:', nativeEvent.description);
+            }
+          }}
+          startInLoadingState
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#2E7D32" />
+            </View>
+          )}
+          onShouldStartLoadWithRequest={(request) => {
+            // Allow all URLs to load in the WebView
+            return true;
+          }}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.log('WebView HTTP error:', nativeEvent);
+          }}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -201,26 +392,25 @@ export default function ProfileScreen() {
             <>
               <View style={styles.statusRow}>
                 <Text style={styles.statusLabel}>Status:</Text>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: getStatusColor(subscription?.subscription_status) + '1A' }
-                ]}>
+                <View 
+                  style={[
+                    styles.statusBadge,
+                    { 
+                      backgroundColor: getStatusColor(subscription?.subscription_status) + '1A',
+                      borderColor: getStatusColor(subscription?.subscription_status)
+                    }
+                  ]}
+                >
                   <Text style={[
                     styles.statusText,
                     { color: getStatusColor(subscription?.subscription_status) }
                   ]}>
-                    {getStatusText(subscription?.subscription_status, subscription?.trial_end_date)}
+                    {subscription?.cancel_at_period_end 
+                      ? 'Active (Ending Soon)' 
+                      : getStatusText(subscription?.subscription_status, subscription?.trial_end_date)
+                    }
                   </Text>
                 </View>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Plan:</Text>
-                <Text style={styles.detailValue}>
-                  {subscription?.plan_type ? 
-                    subscription.plan_type.charAt(0).toUpperCase() + subscription.plan_type.slice(1) : 
-                    'No active plan'}
-                </Text>
               </View>
               
               {subscription?.next_billing_date && (
@@ -241,34 +431,119 @@ export default function ProfileScreen() {
                 </View>
               )}
               
-              {subscription?.cancel_at_period_end ? (
-                <View style={[styles.noticeContainer, { backgroundColor: '#FFF3E0' }]}>
-                  <MaterialIcons name="info-outline" size={18} color="#FF9800" />
-                  <Text style={[styles.noticeText, { color: '#E65100' }]}>
-                    Your subscription will end on {formatDate(subscription.subscription_end_date)}
-                  </Text>
-                </View>
-              ) : subscription?.subscription_status === 'active' && (
-                <TouchableOpacity 
-                  onPress={handleUnsubscribe}
-                  disabled={isUnsubscribing}
-                >
-                  {isUnsubscribing ? (
-                    <ActivityIndicator size="small" color="#F44336" />
-                  ) : (
-                    <Text style={styles.unsubscribeLink}>Unsubscribe</Text>
-                  )}
-                </TouchableOpacity>
+              <View style={styles.actionsContainer}>
+                {subscription?.cancel_at_period_end ? (
+                  <View style={[styles.noticeContainer, { backgroundColor: '#FFF3E0' }]}>
+                    <MaterialIcons name="info-outline" size={18} color="#FF9800" />
+                    <Text style={[styles.noticeText, { color: '#E65100' }]}>
+                      Your subscription will end on {formatDate(subscription.subscription_end_date)}
+                    </Text>
+                  </View>
+                ) : subscription?.subscription_status === 'active' && (
+                  <TouchableOpacity 
+                    onPress={handleUnsubscribe}
+                    disabled={isUnsubscribing}
+                    style={styles.unsubscribeButton}
+                  >
+                    {isUnsubscribing ? (
+                      <ActivityIndicator size="small" color="#F44336" />
+                    ) : (
+                      <Text style={styles.unsubscribeButtonText}>Cancel Subscription</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Analysis Usage Card */}
+        <View style={styles.card}>
+          <View style={styles.analysisCardHeader}>
+            <Text style={styles.analysisCardTitle}>Analysis Usage</Text>
+            <TouchableOpacity 
+              onPress={fetchSubscription}
+              disabled={subscriptionLoading}
+              style={styles.refreshButton}
+            >
+              <MaterialIcons 
+                name="refresh" 
+                size={20} 
+                color="#4CAF50"
+                style={subscriptionLoading ? { opacity: 0.5 } : null}
+              />
+            </TouchableOpacity>
+          </View>
+          {subscriptionLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#2E7D32" />
+              <Text style={styles.loadingText}>Loading usage data...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <MaterialIcons name="error-outline" size={24} color="#F44336" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : (
+            <>
+              {analysisUsage.isTrial ? (
+                <Text style={styles.trialText}>
+                  You're on a trial with {analysisUsage.total} analyses included
+                </Text>
+              ) : (
+                <Text style={styles.usageText}>
+                  {analysisUsage.remaining} of {analysisUsage.total} analyses remaining this month
+                </Text>
               )}
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill,
+                    { 
+                      width: `${Math.min(100, (analysisUsage.used / analysisUsage.total) * 100)}%`,
+                      backgroundColor: analysisUsage.isTrial ? '#FFC107' : '#4CAF50'
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.usageDetail}>
+                {analysisUsage.used} analyses used • {analysisUsage.remaining} remaining
+              </Text>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.purchaseButton, { marginTop: 20 }]}
+                onPress={async () => {
+                  try {
+                    setIsPurchasing(true);
+                    const { url } = await purchaseAnalyses(user.id);
+                    if (url) {
+                      setCheckoutUrl(url);
+                      setShowWebView(true);
+                    }
+                  } catch (err) {
+                    console.error('Purchase error:', err);
+                    Alert.alert(
+                      'Purchase Error', 
+                      err.message || 'Failed to start purchase. Please try again.'
+                    );
+                  } finally {
+                    setIsPurchasing(false);
+                  }
+                }}
+                disabled={isPurchasing}
+              >
+                {isPurchasing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.purchaseButtonText}>Buy More Analyses</Text>
+                )}
+              </TouchableOpacity>
             </>
           )}
         </View>
         
-
-        
-        <View style={styles.menu}>
+        <View style={[styles.card, { paddingVertical: 0, paddingHorizontal: 0, marginBottom: 24 }]}>
           <TouchableOpacity 
-            style={styles.menuItem}
+            style={[styles.menuItem, { padding: 20 }]}
             onPress={handleSignOut}
           >
             <View style={styles.menuItemLeft}>
@@ -284,6 +559,13 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  webView: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -378,14 +660,84 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  // Base card header style
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  // Specific style for analysis usage card header
+  analysisCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 4, // Vertical padding for better alignment of refresh button
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 16,
+    color: '#333',
+    marginBottom: 15, // Keep bottom margin for regular card titles
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  },
+  // Specific style for analysis usage card title
+  analysisCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 0, // No bottom margin for analysis card title
+    paddingVertical: 4, // Vertical padding for better alignment
+  },
+  refreshButton: {
+    padding: 4,
+    marginLeft: 8, // Add some spacing between the title and the button
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  analysisUsageContainer: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  trialText: {
+    fontSize: 15,
+    color: '#FF9800',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  usageText: {
+    fontSize: 16,
+    color: '#2E7D32',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E0E0E0',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  usageDetail: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 4,
   },
   statusRow: {
     flexDirection: 'row',
@@ -400,8 +752,9 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
     backgroundColor: '#E8F5E9',
   },
   statusText: {
@@ -427,7 +780,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 8,
-    marginTop: 16,
+    marginTop: 8,
   },
   noticeText: {
     marginLeft: 8,
@@ -451,16 +804,39 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+    paddingBottom: 24, // Add bottom padding to avoid bottom navigation overlap
   },
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 15,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   menuItemLeft: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionsContainer: {
+    marginTop: 16,
+    gap: 12,
+  },
+  actionButton: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  purchaseButton: {
+    backgroundColor: '#4CAF50',
+  },
+  purchaseButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  unsubscribeButton: {
     alignItems: 'center',
   },
   menuItemText: {
