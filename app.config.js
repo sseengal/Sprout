@@ -12,7 +12,8 @@ export default {
     jsEngine: 'hermes',
     plugins: [
       "expo-web-browser",
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ],
     
     splash: {
@@ -45,6 +46,7 @@ export default {
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY,
       plantIdApiKey: process.env.EXPO_PUBLIC_PLANT_ID_API_KEY,
+      geminiApiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY,
       env: {
         PLANT_ID_API_KEY: process.env.PLANT_ID_API_KEY,
         ENABLE_LOGGING: process.env.ENABLE_LOGGING === 'true',

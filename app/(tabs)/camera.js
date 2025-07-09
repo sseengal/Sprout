@@ -13,7 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { identifyPlant } from '../../src/services/plantService';
+import { identifyPlant } from '../../services/plantIdService';
 
 const CameraScreen = () => {
   const router = useRouter();
@@ -32,7 +32,7 @@ const CameraScreen = () => {
   const takePicture = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'Images',
+        mediaTypes: "images",
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -50,7 +50,7 @@ const CameraScreen = () => {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+        mediaTypes: "images",
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,

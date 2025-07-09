@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import * as FileSystem from 'expo-file-system';
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 /**
  * Service to interact with our secure API endpoints

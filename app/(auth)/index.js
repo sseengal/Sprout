@@ -8,7 +8,7 @@ import { useLocalSearchParams } from 'expo-router';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, loading, error: authError, clearError } = useAuth();
+  const { signUpWithEmail, signInWithEmail, handleGoogleSignIn, testDeepLink, loading, error: authError, clearError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -376,6 +376,23 @@ export default function LoginScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              
+              {/* Skip Login Button */}
+              <TouchableOpacity 
+                style={[styles.button, styles.skipButton]} 
+                onPress={async () => {
+                  try {
+                    console.log('Skip login button pressed');
+                    await testDeepLink();
+                  } catch (error) {
+                    console.error('Error skipping login:', error);
+                    setFormError('Failed to skip login');
+                  }
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.skipButtonText}>Skip Login (Dev Mode)</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -554,5 +571,14 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
     fontSize: 14,
     fontWeight: '600',
+  },
+  skipButton: {
+    backgroundColor: '#FF9800',
+    marginTop: 24,
+  },
+  skipButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });
