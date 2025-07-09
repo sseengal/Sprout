@@ -8,13 +8,13 @@ import ConfidenceBadge from '../../components/plant/ConfidenceBadge';
 import NoteContainer from '../../components/plant/NoteContainer';
 import PlantInfoSection from '../../components/plant/PlantInfoSection';
 import SaveButton from '../../components/plant/SaveButton';
-import { analyzePlantHealth } from '../services/apiService';
-import { supabase } from '../services/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSavedPlants } from '../../contexts/SavedPlantsContext';
 import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
+import { analyzePlantHealth } from '../../services/apiService';
 import { extractPlantInfo } from '../../utils/plantDetails';
-
 import { getPlantInfo } from '../../utils/geminiService';
+import AnalysisContent from '../../components/analysis/AnalysisContent';
 
 export default function AnalysisScreen() {
   const searchParams = useLocalSearchParams();
@@ -105,7 +105,6 @@ export default function AnalysisScreen() {
       // This is a new analysis - proceed with API calls
       setGeminiLoading(true);
       setGeminiError(null);
-      setPlantInfo(null);
 
       try {
         const plantName = getPlantNetTopName();
@@ -246,194 +245,32 @@ export default function AnalysisScreen() {
     loadCredits();
   }, [user?.id]);
 
+  if (!plantData) {
+    return (
+      <View style={styles.centered}>
+        <MaterialIcons name="science" size={64} color="#DDD" />
+        <Text style={styles.emptyText}>No plant analysis yet</Text>
+        <Text style={styles.emptySubtext}>Start a new analysis by capturing a plant image or select a saved plant from 'My Plants'.</Text>
+      </View>
+    );
+  }
+  
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f7f0' }} edges={['top']}>
-      <ScrollView style={{ flex: 1, padding: 16 }}>
-        <View style={styles.headerContainer}>
-          <View style={styles.usageContainer}>
-            <Text style={styles.usageLabel}>Analyses Left</Text>
-            <Text style={styles.usageCount}>
-              {!isLoadingCredits ? credits.total : '...'}
-            </Text>
-            {credits.total === 0 && (
-              <Text style={styles.upgradeText}>
-                Upgrade for more analyses
-              </Text>
-            )}
-          </View>
-        </View>
-        {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
-        ) : null}
-        {plantInfo && (
-          <View style={{ marginBottom: 12 }}>
-            {/* Common Name (from Gemini, else PlantNet) */}
-            <Text style={[styles.commonName, { textAlign: 'center', marginBottom: 0 }]}>
-              {plantInfo.commonName || (plantData?.suggestions && plantData.suggestions[0]?.plant_details?.common_names?.[0]) || ''}
-            </Text>
-            {/* Scientific Name */}
-            {plantInfo.scientificName ? (
-              <Text style={[styles.scientificName, { textAlign: 'center' }]}>{plantInfo.scientificName}</Text>
-            ) : null}
-            {/* Confidence badge and Save button in same row */}
-            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8 }}>
-              {(plantData?.suggestions && plantData.suggestions[0]?.probability > 0) && (
-                <View style={{ marginRight: 16 }}>
-                  <ConfidenceBadge probability={Math.round(plantData.suggestions[0].probability * 100)} />
-                </View>
-              )}
-              <SaveButton saved={saved} label={saved ? 'Saved' : 'Save'} onPress={handleToggleSave} />
-            </View>
-          </View>
-        )}
-        {geminiLoading && (
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            <Text style={{ color: '#888', fontSize: 15 }}>Fetching detailed plant info...</Text>
-          </View>
-        )}
-        {geminiError && (
-          <View style={{ alignItems: 'center', marginVertical: 8 }}>
-            <Text style={{ color: '#D32F2F', fontSize: 14 }}>Gemini Error: {geminiError}</Text>
-          </View>
-        )}
-        {plantInfo ? (
-          <>
-            <PlantInfoSection
-              scientificName={plantInfo.scientificName}
-              family={plantInfo.family}
-              genus={plantInfo.genus}
-              origin={plantInfo.origin}
-              growthRate={plantInfo.growthRate}
-              matureSize={plantInfo.matureSize}
-              toxicity={plantInfo.toxicity}
-              funFacts={plantInfo.funFacts}
-              commonUses={plantInfo.commonUses}
-              ecologicalRole={plantInfo.ecologicalRole}
-              culturalUses={plantInfo.culturalUses}
-              historicalUses={plantInfo.historicalUses}
-              wikiUrl={plantInfo.wikiUrl}
-            />
-            <CareInstructionsSection careTips={plantInfo.careTips} careDetails={plantInfo.careDetails} />
-            
-            {/* PLANT.ID Section */}
-            <View style={styles.plantIdSection}>
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="science" size={20} color="#2E7D32" />
-                <Text style={styles.sectionTitle}>PLANT.ID Analysis</Text>
-              </View>
-              <View style={styles.plantIdContent}>
-                {plantIdLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.loadingText}>Analyzing plant health...</Text>
-                  </View>
-                ) : plantIdError ? (
-                  <View style={styles.errorContainer}>
-                    <MaterialIcons name="error-outline" size={24} color="#D32F2F" />
-                    <Text style={styles.errorText}>{plantIdError}</Text>
-                    <TouchableOpacity 
-                      style={styles.retryButton} 
-                      onPress={fetchPlantHealthData}
-                    >
-                      <Text style={styles.retryButtonText}>Retry Analysis</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : plantIdData ? (
-                  <View>
-                    <View style={styles.healthStatusContainer}>
-                      <MaterialIcons 
-                        name={plantIdData.isHealthy ? "check-circle" : "warning"} 
-                        size={24} 
-                        color={plantIdData.isHealthy ? "#4CAF50" : "#FFC107"} 
-                      />
-                      <Text style={[styles.healthStatusText, { color: plantIdData.isHealthy ? "#4CAF50" : "#FFC107" }]}>
-                        {plantIdData.isHealthy ? "Plant appears healthy" : "Health issues detected"}
-                      </Text>
-                    </View>
-                    
-                    {!plantIdData.isHealthy && plantIdData.diseases && plantIdData.diseases.length > 0 ? (
-                      <View style={styles.diseasesContainer}>
-                        {plantIdData.diseases.map((disease, index) => (
-                          <View key={index} style={styles.diseaseItem}>
-                            <View style={styles.diseaseHeader}>
-                              <Text style={styles.diseaseName}>{disease.name}</Text>
-                              <View style={styles.probabilityBadge}>
-                                <Text style={styles.probabilityText}>
-                                  {Math.round(disease.probability * 100)}%
-                                </Text>
-                              </View>
-                            </View>
-                            
-                            <Text style={styles.diseaseDescription}>{disease.description}</Text>
-                            
-                            <View style={styles.treatmentSection}>
-                              <Text style={styles.treatmentTitle}>Treatment Options:</Text>
-                              
-                              {disease.treatment.prevention && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Prevention:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.prevention}</Text>
-                                </View>
-                              )}
-                              
-                              {disease.treatment.biological && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Biological:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.biological}</Text>
-                                </View>
-                              )}
-                              
-                              {disease.treatment.chemical && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Chemical:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.chemical}</Text>
-                                </View>
-                              )}
-                            </View>
-                            
-                            {disease.similarImages && disease.similarImages.length > 0 && (
-                              <View style={styles.similarImagesSection}>
-                                <Text style={styles.similarImagesTitle}>Similar Cases:</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.similarImagesScroll}>
-                                  {disease.similarImages.slice(0, 3).map((imageUrl, imgIndex) => (
-                                    <Image 
-                                      key={imgIndex} 
-                                      source={{ uri: imageUrl }} 
-                                      style={styles.similarImage} 
-                                      resizeMode="cover"
-                                    />
-                                  ))}
-                                </ScrollView>
-                              </View>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    ) : plantIdData.isHealthy ? (
-                      <Text style={styles.healthyMessage}>
-                        No signs of disease detected. Continue with regular care.
-                      </Text>
-                    ) : (
-                      <Text style={styles.noDataMessage}>
-                        No specific disease information available.
-                      </Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.plantIdPlaceholder}>
-                    Detailed plant disease analysis will be shown here
-                  </Text>
-                )}
-              </View>
-            </View>
-          </>
-        ) : geminiError ? (
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            <Text style={{ color: '#D32F2F', fontSize: 15 }}>{geminiError}</Text>
-          </View>
-        ) : null}
-        <NoteContainer />
-      </ScrollView>
-    </SafeAreaView>
+    <AnalysisContent
+      imageUri={imageUri}
+      plantInfo={plantInfo}
+      plantData={plantData}
+      saved={saved}
+      handleToggleSave={handleToggleSave}
+      geminiLoading={geminiLoading}
+      geminiError={geminiError}
+      plantIdLoading={plantIdLoading}
+      plantIdError={plantIdError}
+      plantIdData={plantIdData}
+      fetchPlantHealthData={fetchPlantHealthData}
+      credits={credits}
+      isLoadingCredits={isLoadingCredits}
+    />
   );
 }
 
