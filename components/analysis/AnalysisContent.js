@@ -19,10 +19,11 @@ export default function AnalysisContent({
   handleToggleSave,
   geminiLoading,
   geminiError,
-  plantIdLoading,
-  plantIdError,
-  plantIdData,
-  fetchPlantHealthData,
+  // Plant.ID API related props - disabled
+  // plantIdLoading,
+  // plantIdError,
+  // plantIdData,
+  // fetchPlantHealthData,
   credits,
   isLoadingCredits
 }) {
@@ -95,116 +96,7 @@ export default function AnalysisContent({
             />
             <CareInstructionsSection careTips={plantInfo.careTips} careDetails={plantInfo.careDetails} />
             
-            {/* PLANT.ID Section */}
-            <View style={styles.plantIdSection}>
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="science" size={20} color="#2E7D32" />
-                <Text style={styles.sectionTitle}>PLANT.ID Analysis</Text>
-              </View>
-              <View style={styles.plantIdContent}>
-                {plantIdLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.loadingText}>Analyzing plant health...</Text>
-                  </View>
-                ) : plantIdError ? (
-                  <View style={styles.errorContainer}>
-                    <MaterialIcons name="error-outline" size={24} color="#D32F2F" />
-                    <Text style={styles.errorText}>{plantIdError}</Text>
-                    <TouchableOpacity 
-                      style={styles.retryButton} 
-                      onPress={fetchPlantHealthData}
-                    >
-                      <Text style={styles.retryButtonText}>Retry Analysis</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : plantIdData ? (
-                  <View>
-                    <View style={styles.healthStatusContainer}>
-                      <MaterialIcons 
-                        name={plantIdData.isHealthy ? "check-circle" : "warning"} 
-                        size={24} 
-                        color={plantIdData.isHealthy ? "#4CAF50" : "#FFC107"} 
-                      />
-                      <Text style={[styles.healthStatusText, { color: plantIdData.isHealthy ? "#4CAF50" : "#FFC107" }]}>
-                        {plantIdData.isHealthy ? "Plant appears healthy" : "Health issues detected"}
-                      </Text>
-                    </View>
-                    
-                    {!plantIdData.isHealthy && plantIdData.diseases && plantIdData.diseases.length > 0 ? (
-                      <View style={styles.diseasesContainer}>
-                        {plantIdData.diseases.map((disease, index) => (
-                          <View key={index} style={styles.diseaseItem}>
-                            <View style={styles.diseaseHeader}>
-                              <Text style={styles.diseaseName}>{disease.name}</Text>
-                              <View style={styles.probabilityBadge}>
-                                <Text style={styles.probabilityText}>
-                                  {Math.round(disease.probability * 100)}%
-                                </Text>
-                              </View>
-                            </View>
-                            
-                            <Text style={styles.diseaseDescription}>{disease.description}</Text>
-                            
-                            <View style={styles.treatmentSection}>
-                              <Text style={styles.treatmentTitle}>Treatment Options:</Text>
-                              
-                              {disease.treatment?.prevention && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Prevention:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.prevention}</Text>
-                                </View>
-                              )}
-                              
-                              {disease.treatment?.biological && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Biological:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.biological}</Text>
-                                </View>
-                              )}
-                              
-                              {disease.treatment?.chemical && (
-                                <View style={styles.treatmentItem}>
-                                  <Text style={styles.treatmentType}>Chemical:</Text>
-                                  <Text style={styles.treatmentText}>{disease.treatment.chemical}</Text>
-                                </View>
-                              )}
-                            </View>
-                            
-                            {disease.similarImages && disease.similarImages.length > 0 && (
-                              <View style={styles.similarImagesSection}>
-                                <Text style={styles.similarImagesTitle}>Similar Cases:</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.similarImagesScroll}>
-                                  {disease.similarImages.slice(0, 3).map((imageUrl, imgIndex) => (
-                                    <Image 
-                                      key={imgIndex} 
-                                      source={{ uri: imageUrl }} 
-                                      style={styles.similarImage} 
-                                      resizeMode="cover"
-                                    />
-                                  ))}
-                                </ScrollView>
-                              </View>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    ) : plantIdData.isHealthy ? (
-                      <Text style={styles.healthyMessage}>
-                        No signs of disease detected. Continue with regular care.
-                      </Text>
-                    ) : (
-                      <Text style={styles.noDataMessage}>
-                        No specific disease information available.
-                      </Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.plantIdPlaceholder}>
-                    Detailed plant disease analysis will be shown here
-                  </Text>
-                )}
-              </View>
-            </View>
+            {/* PLANT.ID Section and disease detection functionality has been disabled as requested */}
           </>
         ) : geminiError ? (
           <View style={{ alignItems: 'center', marginVertical: 16 }}>

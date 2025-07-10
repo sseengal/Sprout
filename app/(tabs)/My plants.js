@@ -1,13 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { Alert, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
+import { useReminders } from '../../contexts/ReminderContext';
 
 export default function MyPlantsScreen() {
   const { savedPlants, removePlant } = useSavedPlants();
+  const { reminders } = useReminders();
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleDeletePlant = (plantId) => {
     Alert.alert(
@@ -25,7 +28,23 @@ export default function MyPlantsScreen() {
       ]
     );
   };
-
+  
+  // Filter plants based on search query
+  const filteredPlants = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return savedPlants;
+    }
+    
+    const normalizedQuery = searchQuery.toLowerCase().trim();
+    return savedPlants.filter(plant => {
+      const commonName = plant.plantData?.commonName || '';
+      const scientificName = plant.plantData?.scientificName || '';
+      
+      return commonName.toLowerCase().includes(normalizedQuery) || 
+             scientificName.toLowerCase().includes(normalizedQuery);
+    });
+  }, [savedPlants, searchQuery]);
+  
   const renderPlantItem = ({ item }) => (
     <View style={styles.plantItem}>
       <TouchableOpacity
@@ -46,42 +65,77 @@ export default function MyPlantsScreen() {
           resizeMode="cover"
         />
         <View style={styles.plantInfo}>
-          <Text style={styles.plantName} numberOfLines={1}>
-            {item.plantData.commonName || 'Unnamed Plant'}
+          <Text style={styles.plantName}>
+            {item.plantData.commonName || 'Unknown Plant'}
           </Text>
-          {item.plantData.scientificName && (
-            <Text style={styles.scientificName} numberOfLines={1}>
-              {item.plantData.scientificName}
-            </Text>
-          )}
+          <Text style={styles.scientificName}>
+            {item.plantData.scientificName || ''}
+          </Text>
         </View>
-        <MaterialIcons name="chevron-right" size={24} color="#666" />
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.deleteButton}
-        onPress={() => handleDeletePlant(item.id)}
-      >
-        <MaterialIcons name="delete-outline" size={22} color="#D32F2F" />
-      </TouchableOpacity>
+      
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeletePlant(item.id)}
+        >
+          <MaterialIcons name="delete" size={24} color="#d32f2f" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={{ backgroundColor: '#2E7D32' }} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>My Plants</Text>
-          </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>My Plants</Text>
+          <TouchableOpacity 
+            style={styles.reminderHeaderButton}
+            onPress={() => router.push('/reminders')}
+          >
+            <MaterialIcons name="notifications" size={24} color="#fff" />
+            {reminders.length > 0 && (
+              <View style={styles.headerReminderBadge}>
+                <Text style={styles.headerReminderBadgeText}>{reminders.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
       <View style={styles.content}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={24} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search plants..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <MaterialIcons name="clear" size={20} color="#999" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        
         {savedPlants.length > 0 ? (
           <FlatList
-            data={savedPlants}
+            data={filteredPlants}
             renderItem={renderPlantItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={searchQuery ? (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="search-off" size={64} color="#DDD" />
+                <Text style={styles.emptyText}>No plants match your search</Text>
+                <Text style={styles.emptySubtext}>
+                  Try a different search term
+                </Text>
+              </View>
+            ) : null}
           />
         ) : (
           <View style={styles.emptyContainer}>
@@ -93,7 +147,11 @@ export default function MyPlantsScreen() {
           </View>
         )}
       </View>
-    </View>
+      
+
+      
+
+    </SafeAreaView>
   );
 }
 
@@ -103,17 +161,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#2E7D32',
     padding: 16,
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    margin: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 8,
+  },
+  clearButton: {
+    padding: 4,
+  },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginVertical: 8,
+  },
+  reminderHeaderButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  headerReminderBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF9800',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerReminderBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   content: {
     flex: 1,
@@ -165,12 +263,15 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
-  deleteButton: {
-    padding: 12,
+  buttonsContainer: {
+    flexDirection: 'row',
     alignSelf: 'stretch',
-    justifyContent: 'center',
     borderLeftWidth: 1,
     borderLeftColor: '#eee',
+  },
+  deleteButton: {
+    padding: 12,
+    justifyContent: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -190,5 +291,40 @@ const styles = StyleSheet.create({
     color: '#AAA',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    backgroundColor: '#e0e0e0',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  closeButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

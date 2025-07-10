@@ -1,10 +1,15 @@
 import * as Linking from 'expo-linking';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, View, Alert } from 'react-native';
+import { ActivityIndicator, View, Alert, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import Toast from 'react-native-toast-message';
 import { supabase } from '../lib/supabase';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SavedPlantsProvider } from '../contexts/SavedPlantsContext';
+import { ReminderProvider } from '../contexts/ReminderContext';
+import * as NotificationService from '../services/notificationService';
+import { toastConfig } from '../components/common/ToastConfig';
 
 // Create a simple logger
 const createLogger = (component) => {
@@ -256,15 +261,60 @@ function AuthLayout() {
     }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(auth)" />
+      <Stack.Screen name="reminders" options={{ headerShown: true }}/>
     </Stack>
   );
+}
+
+// Setup notification channels for Android
+async function setupNotificationChannels() {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('plant-care-reminders', {
+      name: 'Plant Care Reminders',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#2E7D32',
+    });
+  }
+}
+
+// Notification initialization wrapper component
+function NotificationInitializer({ children }) {
+  const logger = useMemo(() => createLogger('NotificationInitializer'), []);
+  
+  useEffect(() => {
+    // Initialize notifications when the app starts
+    const initializeNotifications = async () => {
+      try {
+        logger('Initializing notifications');
+        
+        // Set up Android notification channels
+        await setupNotificationChannels();
+        
+        // Request notification permissions
+        const hasPermission = await NotificationService.requestNotificationPermissions();
+        logger(`Notification permissions ${hasPermission ? 'granted' : 'denied'}`);
+      } catch (error) {
+        logger('Error initializing notifications:', error);
+      }
+    };
+    
+    initializeNotifications();
+  }, [logger]);
+  
+  return children;
 }
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <SavedPlantsProvider>
-        <AuthLayout />
+        <ReminderProvider>
+          <NotificationInitializer>
+            <AuthLayout />
+            <Toast config={toastConfig} />
+          </NotificationInitializer>
+        </ReminderProvider>
       </SavedPlantsProvider>
     </AuthProvider>
   );

@@ -8,6 +8,7 @@ import ConfidenceBadge from '../../components/plant/ConfidenceBadge';
 import NoteContainer from '../../components/plant/NoteContainer';
 import PlantInfoSection from '../../components/plant/PlantInfoSection';
 import SaveButton from '../../components/plant/SaveButton';
+import CareScheduleCard from '../../components/reminders/CareScheduleCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
 import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
@@ -71,20 +72,10 @@ export default function AnalysisScreen() {
     return '';
   };
 
+  // Disease detection functionality has been disabled
   const fetchPlantHealthData = async () => {
-    if (!imageUri) return;
-    
-    try {
-      setPlantIdLoading(true);
-      setPlantIdError(null);
-      const healthData = await analyzePlantHealth(imageUri);
-      setPlantIdData(healthData);
-    } catch (error) {
-      console.error('Error fetching plant health data:', error);
-      setPlantIdError(error.message || 'Failed to analyze plant health');
-    } finally {
-      setPlantIdLoading(false);
-    }
+    // Function disabled - no longer making API calls for plant health analysis
+    return;
   };
 
   // Handle plant analysis on mount/plant change
@@ -171,11 +162,8 @@ export default function AnalysisScreen() {
     handlePlantAnalysis();
   }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name, searchParams?.isSavedView]);
 
-  useEffect(() => {
-    if (imageUri) {
-      fetchPlantHealthData();
-    }
-  }, [imageUri]);
+  // Disease detection functionality has been disabled
+  // useEffect for fetchPlantHealthData removed
 
   // Only show plant info if we have Gemini data
   const plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
@@ -264,10 +252,11 @@ export default function AnalysisScreen() {
       handleToggleSave={handleToggleSave}
       geminiLoading={geminiLoading}
       geminiError={geminiError}
-      plantIdLoading={plantIdLoading}
-      plantIdError={plantIdError}
-      plantIdData={plantIdData}
-      fetchPlantHealthData={fetchPlantHealthData}
+      // Plant.ID related props removed - disease detection disabled
+      // plantIdLoading={plantIdLoading}
+      // plantIdError={plantIdError}
+      // plantIdData={plantIdData}
+      // fetchPlantHealthData={fetchPlantHealthData}
       credits={credits}
       isLoadingCredits={isLoadingCredits}
     />

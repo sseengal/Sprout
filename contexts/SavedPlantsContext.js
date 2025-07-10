@@ -41,6 +41,12 @@ export function SavedPlantsProvider({ children }) {
   // Remove plant by id
   const removePlant = useCallback((plantId) => {
     setSavedPlants((prev) => prev.filter((p) => p.id !== plantId));
+    
+    // Publish event to AsyncStorage for other contexts to detect
+    AsyncStorage.setItem('PLANT_DELETED_EVENT', JSON.stringify({
+      plantId,
+      timestamp: Date.now()
+    })).catch(error => console.error('Error publishing plant deletion event:', error));
   }, []);
 
   // Utility to check if a plant is saved (by id or imageUri+scientificName)
