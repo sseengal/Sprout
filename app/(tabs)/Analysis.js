@@ -1,31 +1,31 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import CareInstructionsSection from '../../components/plant/CareInstructionsSection';
-import ConfidenceBadge from '../../components/plant/ConfidenceBadge';
-import NoteContainer from '../../components/plant/NoteContainer';
-import PlantInfoSection from '../../components/plant/PlantInfoSection';
-import SaveButton from '../../components/plant/SaveButton';
-import CareScheduleCard from '../../components/reminders/CareScheduleCard';
+import { Alert, Image, StyleSheet, Text, View } from 'react-native';
+import Toast from 'react-native-toast-message';
+import AnalysisContent from '../../components/analysis/AnalysisContent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
 import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
-import { analyzePlantHealth } from '../../services/apiService';
-import { extractPlantInfo } from '../../utils/plantDetails';
 import { getPlantInfo } from '../../utils/geminiService';
-import AnalysisContent from '../../components/analysis/AnalysisContent';
+import { extractPlantInfo } from '../../utils/plantDetails';
 
 export default function AnalysisScreen() {
   const searchParams = useLocalSearchParams();
-  let plantData, imageUri;
+  const router = useRouter();
+  let plantData, imageUri, isTextSearch = false, plantName;
   if (searchParams && searchParams.plantData) {
     try {
       // Only parse if plantData is a string that looks like JSON
       if (typeof searchParams.plantData === 'string' && searchParams.plantData.trim().startsWith('{')) {
         const parsed = JSON.parse(searchParams.plantData);
-        if (parsed && parsed.plantData) {
+        
+        // Check if this is a text-based search
+        if (parsed && parsed.textSearch) {
+          isTextSearch = true;
+          plantName = searchParams.plantName;
+          plantData = { textSearch: true };
+        } else if (parsed && parsed.plantData) {
           plantData = parsed.plantData;
           imageUri = parsed.imageUri;
         } else {
@@ -60,9 +60,29 @@ export default function AnalysisScreen() {
   const [plantIdLoading, setPlantIdLoading] = useState(false);
   const [plantIdError, setPlantIdError] = useState(null);
   const [geminiPlantName, setGeminiPlantName] = useState('');
+  const [plantImageUrl, setPlantImageUrl] = useState('');
   const { user } = useAuth();
   const [credits, setCredits] = useState({ total: 0, trial: 0, subscription: 0, purchase: 0 });
   const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+  
+  // Reset state when component mounts or unmounts
+  useEffect(() => {
+    // Clear state when component mounts
+    if (!searchParams?.isSavedView) {
+      setGeminiInfo(null);
+      setGeminiPlantName('');
+      setGeminiError(null);
+      setPlantImageUrl('');
+    }
+    
+    // Return cleanup function to clear state when component unmounts
+    return () => {
+      setGeminiInfo(null);
+      setGeminiPlantName('');
+      setGeminiError(null);
+      setPlantImageUrl('');
+    };
+  }, []);
 
   // Helper: get top PlantNet suggestion name
   const getPlantNetTopName = () => {
@@ -96,6 +116,57 @@ export default function AnalysisScreen() {
       // This is a new analysis - proceed with API calls
       setGeminiLoading(true);
       setGeminiError(null);
+      
+      // Handle text-based search differently
+      if (isTextSearch && plantName) {
+        try {
+          setGeminiPlantName(plantName);
+          
+          // Skip PlantNet and directly use Gemini API
+          const info = await getPlantInfo(plantName);
+          setGeminiInfo(info);
+          
+          // Fetch a random plant image from Unsplash
+          try {
+            // Create a safe search term by removing any special characters
+            const searchTerm = plantName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
+            // Use Unsplash source for a random plant image
+            const imageUrl = `https://source.unsplash.com/featured/?${searchTerm},plant`;
+            setPlantImageUrl(imageUrl);
+          } catch (imageError) {
+            console.error('Error fetching plant image:', imageError);
+            // Use a default plant image if fetching fails
+            setPlantImageUrl('https://source.unsplash.com/featured/?plant');
+          }
+          
+          // Track analysis if user is logged in
+          if (user) {
+            try {
+              await useAnalysis(user.id);
+              const newCredits = await getAvailableCredits(user.id);
+              setCredits(newCredits);
+            } catch (error) {
+              console.error('Error recording text search analysis:', error);
+            }
+          }
+          
+          setGeminiLoading(false);
+          return;
+        } catch (error) {
+          console.error('Error in text-based plant search:', error);
+          
+          // Check if this is a model overload error
+          const errorMessage = error.message || '';
+          if (errorMessage.includes('model is overloaded') || errorMessage.includes('503')) {
+            setGeminiError('The AI service is currently busy. Please try again in a few moments.');
+          } else {
+            setGeminiError(errorMessage || 'Failed to get plant information');
+          }
+          
+          setGeminiLoading(false);
+          return;
+        }
+      }
 
       try {
         const plantName = getPlantNetTopName();
@@ -160,15 +231,23 @@ export default function AnalysisScreen() {
     };
 
     handlePlantAnalysis();
-  }, [plantData && plantData.suggestions && plantData.suggestions[0]?.plant_name, searchParams?.isSavedView]);
+  }, [searchParams?.plantData, searchParams?.imageUri, searchParams?.plantName, searchParams?.isSavedView]);
 
   // Disease detection functionality has been disabled
   // useEffect for fetchPlantHealthData removed
 
   // Only show plant info if we have Gemini data
-  const plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
+  // Extract plant info and ensure common name is set for text-based searches
+  let plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
+  
+  // For text-based searches, ensure the common name is set to the search term if not already set
+  if (plantInfo && isTextSearch && plantName && !plantInfo.commonName) {
+    plantInfo = {
+      ...plantInfo,
+      commonName: plantName
+    };
+  }
   const plantId = plantInfo ? ((plantData && plantData.id) || (imageUri ? imageUri : '') + (plantInfo.scientificName || '')) : '';
-  const router = useRouter();
   const { addPlant, removePlant, isPlantSaved } = useSavedPlants();
   const [saved, setSaved] = useState(false);
 
@@ -182,35 +261,67 @@ export default function AnalysisScreen() {
     if (!plantInfo) return;
     if (saved) {
       removePlant(plantId);
-      Alert.alert('Removed', 'This plant has been removed from your collection.');
-    } else {
-      console.log('DEBUG: Saving plantData:', JSON.stringify(plantData, null, 2));
-      // Extract names from the suggestions array
-      let commonName = '';
-      let scientificName = '';
-      if (
-        plantData.suggestions &&
-        plantData.suggestions.length > 0 &&
-        plantData.suggestions[0].plant_details
-      ) {
-        const details = plantData.suggestions[0].plant_details;
-        commonName = Array.isArray(details.common_names) && details.common_names.length > 0
-          ? details.common_names[0]
-          : '';
-        scientificName = details.scientific_name || '';
-      }
-      addPlant({
-        plantData: {
-          ...plantData,
-          commonName,
-          scientificName,
-          geminiInfo: geminiInfo // Save the Gemini info for later use
-        },
-        imageUri: imageUri || '',
-        id: plantId,
-        savedAt: Date.now(),
+      setSaved(false); // Update the saved state
+      Toast.show({
+        type: 'info',
+        text1: 'Plant removed',
+        text2: plantInfo.commonName || 'Plant has been removed from your collection',
+        position: 'top',
+        visibilityTime: 2000,
       });
-      Alert.alert('Plant Saved', 'This plant has been added to your collection!');
+    } else {
+      // Handle saving differently based on search type
+      if (isTextSearch) {
+        // For text-based searches, use the plant name directly
+        addPlant({
+          plantData: {
+            textSearch: true,
+            commonName: plantInfo.commonName || plantName,
+            scientificName: plantInfo.scientificName || '',
+            geminiInfo: geminiInfo // Save the Gemini info for later use
+          },
+          imageUri: plantImageUrl, // Use the fetched image URL for text-based searches
+          id: plantId,
+          savedAt: Date.now(),
+          searchType: 'text'
+        });
+      } else {
+        console.log('DEBUG: Saving plantData:', JSON.stringify(plantData, null, 2));
+        // Extract names from the suggestions array for image-based searches
+        let commonName = '';
+        let scientificName = '';
+        if (
+          plantData.suggestions &&
+          plantData.suggestions.length > 0 &&
+          plantData.suggestions[0].plant_details
+        ) {
+          const details = plantData.suggestions[0].plant_details;
+          commonName = Array.isArray(details.common_names) && details.common_names.length > 0
+            ? details.common_names[0]
+            : '';
+          scientificName = details.scientific_name || '';
+        }
+        addPlant({
+          plantData: {
+            ...plantData,
+            commonName,
+            scientificName,
+            geminiInfo: geminiInfo // Save the Gemini info for later use
+          },
+          imageUri: imageUri || '',
+          id: plantId,
+          savedAt: Date.now(),
+          searchType: 'image'
+        });
+      }
+      setSaved(true); // Update the saved state
+      Toast.show({
+        type: 'info',
+        text1: 'Plant saved',
+        text2: plantInfo.commonName || 'Plant has been added to your collection',
+        position: 'top',
+        visibilityTime: 2000,
+      });
     }
   };
 
@@ -243,15 +354,24 @@ export default function AnalysisScreen() {
     );
   }
   
+  // Function to retry text-based search
+  const handleRetryTextSearch = async () => {
+    if (isTextSearch && plantName) {
+      await handlePlantAnalysis();
+    }
+  };
+
   return (
     <AnalysisContent
-      imageUri={imageUri}
-      plantInfo={plantInfo}
+      imageUri={isTextSearch ? plantImageUrl : imageUri}
       plantData={plantData}
-      saved={saved}
+      plantInfo={plantInfo}
       handleToggleSave={handleToggleSave}
+      saved={saved} // Pass the saved state to AnalysisContent
       geminiLoading={geminiLoading}
       geminiError={geminiError}
+      isTextSearch={isTextSearch}
+      onRetry={handleRetryTextSearch}
       // Plant.ID related props removed - disease detection disabled
       // plantIdLoading={plantIdLoading}
       // plantIdError={plantIdError}
