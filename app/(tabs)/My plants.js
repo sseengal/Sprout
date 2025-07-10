@@ -55,7 +55,7 @@ export default function MyPlantsScreen() {
             plantData: JSON.stringify(item.plantData),
             imageUri: item.imageUri,
             isSavedView: true,  // Mark this as a saved plant view
-            savedGeminiInfo: item.plantData.geminiInfo  // Include previously fetched Gemini data
+            savedGeminiInfo: item.plantData.geminiInfo ? JSON.stringify(item.plantData.geminiInfo) : null  // Stringify the Gemini data
           }
         })}
       >
