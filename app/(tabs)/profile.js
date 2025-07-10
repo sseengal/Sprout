@@ -1,12 +1,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import SubscriptionCard from '../../components/profile/SubscriptionCard';
+import AnalysisUsageCard from '../../components/profile/AnalysisUsageCard';
+import ProfileHeader from '../../components/profile/ProfileHeader';
+import SignOutButton from '../../components/profile/SignOutButton';
 import { useAuth } from '../../contexts/AuthContext';
 import { purchaseAnalyses } from '../../lib/analyses';
 import { supabase } from '../../lib/supabase';
 import { getAvailableCredits, hasActiveSubscription, getTotalPurchasedCredits } from '../../lib/analysisCredits';
+import { formatDate, getStatusColor, getStatusText, getTrialDaysRemaining } from '../../utils/profileUtils';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -226,62 +231,7 @@ export default function ProfileScreen() {
     );
   };
   
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-  
-  const getStatusColor = (status) => {
-    if (!status) return '#757575';
-    
-    const statusLower = status.toLowerCase();
-    
-    switch (statusLower) {
-      case 'active':
-        return '#4CAF50'; // Green
-      case 'trialing':
-      case 'trial':
-        return '#2196F3'; // Blue
-      case 'past_due':
-      case 'unpaid':
-      case 'incomplete':
-      case 'incomplete_expired':
-        return '#F44336'; // Red
-      case 'canceled':
-      case 'cancelled':
-      case 'unsubscribed':
-        return '#9E9E9E'; // Gray
-      case 'inactive':
-      default:
-        return '#757575'; // Dark gray
-    }
-  };
-  
-  const getTrialDaysRemaining = (trialEndDate) => {
-    if (!trialEndDate) return 0;
-    const end = new Date(trialEndDate).getTime();
-    const now = new Date().getTime();
-    return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-  };
-
-  const getStatusText = (status, trialEndDate) => {
-    if (!status) return 'Inactive';
-    
-    // Format the status text
-    let statusText = status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
-    
-    // Add trial days remaining if in trial
-    if (status === 'trialing' && trialEndDate) {
-      const daysLeft = getTrialDaysRemaining(trialEndDate);
-      statusText += ` - ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
-    }
-    
-    return statusText;
-  };
+  // Utility functions moved to utils/profileUtils.js
   
   if (authLoading) {
     return (
@@ -351,208 +301,36 @@ export default function ProfileScreen() {
       </View>
       
       <ScrollView style={styles.scrollView}>
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            {user?.user_metadata?.avatar_url ? (
-              <Image 
-                source={{ uri: user.user_metadata.avatar_url }} 
-                style={styles.avatar} 
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <MaterialIcons name="person" size={60} color="#fff" />
-              </View>
-            )}
-          </View>
-          
-          <Text style={styles.userName}>
-            {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
-          </Text>
-          
-          {user?.email && (
-            <Text style={styles.userEmail}>{user.email}</Text>
-          )}
-        </View>
+        <ProfileHeader user={user} />
         
         {/* Subscription Status Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Subscription Status</Text>
-          
-          {subscriptionLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#2E7D32" />
-              <Text style={styles.loadingText}>Loading subscription details...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <MaterialIcons name="error-outline" size={24} color="#F44336" />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Status:</Text>
-                <View 
-                  style={[
-                    styles.statusBadge,
-                    { 
-                      backgroundColor: getStatusColor(subscription?.subscription_status) + '1A',
-                      borderColor: getStatusColor(subscription?.subscription_status)
-                    }
-                  ]}
-                >
-                  <Text style={[
-                    styles.statusText,
-                    { color: getStatusColor(subscription?.subscription_status) }
-                  ]}>
-                    {subscription?.cancel_at_period_end 
-                      ? 'Active (Ending Soon)' 
-                      : getStatusText(subscription?.subscription_status, subscription?.trial_end_date)
-                    }
-                  </Text>
-                </View>
-              </View>
-              
-              {subscription?.next_billing_date && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Next bill date:</Text>
-                  <Text style={styles.detailValue}>
-                    {formatDate(subscription.next_billing_date)}
-                  </Text>
-                </View>
-              )}
-              
-              {subscription?.subscription_start_date && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Member Since:</Text>
-                  <Text style={styles.detailValue}>
-                    {formatDate(subscription.subscription_start_date)}
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.actionsContainer}>
-                {subscription?.cancel_at_period_end ? (
-                  <View style={[styles.noticeContainer, { backgroundColor: '#FFF3E0' }]}>
-                    <MaterialIcons name="info-outline" size={18} color="#FF9800" />
-                    <Text style={[styles.noticeText, { color: '#E65100' }]}>
-                      Your subscription will end on {formatDate(subscription.subscription_end_date)}
-                    </Text>
-                  </View>
-                ) : subscription?.subscription_status === 'active' && (
-                  <TouchableOpacity 
-                    onPress={handleUnsubscribe}
-                    disabled={isUnsubscribing}
-                    style={styles.unsubscribeButton}
-                  >
-                    {isUnsubscribing ? (
-                      <ActivityIndicator size="small" color="#F44336" />
-                    ) : (
-                      <Text style={styles.unsubscribeButtonText}>Cancel Subscription</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
-          )}
-        </View>
+        <SubscriptionCard
+          subscription={subscription}
+          subscriptionLoading={subscriptionLoading}
+          error={error}
+          formatDate={formatDate}
+          getStatusColor={getStatusColor}
+          getStatusText={getStatusText}
+          user={user}
+          onSubscriptionUpdate={(updatedSubscription) => setSubscription(updatedSubscription)}
+        />
 
         {/* Analysis Usage Card */}
-        <View style={styles.card}>
-          <View style={styles.analysisCardHeader}>
-            <Text style={styles.analysisCardTitle}>Analysis Usage</Text>
-            <TouchableOpacity 
-              onPress={fetchSubscription}
-              disabled={subscriptionLoading}
-              style={styles.refreshButton}
-            >
-              <MaterialIcons 
-                name="refresh" 
-                size={20} 
-                color="#4CAF50"
-                style={subscriptionLoading ? { opacity: 0.5 } : null}
-              />
-            </TouchableOpacity>
-          </View>
-          {subscriptionLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#2E7D32" />
-              <Text style={styles.loadingText}>Loading usage data...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <MaterialIcons name="error-outline" size={24} color="#F44336" />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : (
-            <>
-              {analysisUsage.isTrial ? (
-                <Text style={styles.trialText}>
-                  You're on a trial with {analysisUsage.total} analyses included
-                </Text>
-              ) : (
-                <Text style={styles.usageText}>
-                  {analysisUsage.remaining} of {analysisUsage.total} analyses remaining this month
-                </Text>
-              )}
-              <View style={styles.progressBar}>
-                <View 
-                  style={[
-                    styles.progressFill,
-                    { 
-                      width: `${Math.min(100, (analysisUsage.used / analysisUsage.total) * 100)}%`,
-                      backgroundColor: analysisUsage.isTrial ? '#FFC107' : '#4CAF50'
-                    }
-                  ]} 
-                />
-              </View>
-              <Text style={styles.usageDetail}>
-                {analysisUsage.used} analyses used • {analysisUsage.remaining} remaining
-              </Text>
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.purchaseButton, { marginTop: 20 }]}
-                onPress={async () => {
-                  try {
-                    setIsPurchasing(true);
-                    const { url } = await purchaseAnalyses(user.id);
-                    if (url) {
-                      setCheckoutUrl(url);
-                      setShowWebView(true);
-                    }
-                  } catch (err) {
-                    console.error('Purchase error:', err);
-                    Alert.alert(
-                      'Purchase Error', 
-                      err.message || 'Failed to start purchase. Please try again.'
-                    );
-                  } finally {
-                    setIsPurchasing(false);
-                  }
-                }}
-                disabled={isPurchasing}
-              >
-                {isPurchasing ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.purchaseButtonText}>Buy More Analyses</Text>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+        <AnalysisUsageCard
+          analysisUsage={analysisUsage}
+          subscriptionLoading={subscriptionLoading}
+          error={error}
+          fetchSubscription={fetchSubscription}
+          user={user}
+          onPurchase={(result) => {
+            if (result && result.checkoutUrl) {
+              setCheckoutUrl(result.checkoutUrl);
+              setShowWebView(result.showWebView);
+            }
+          }}
+        />
         
-        <View style={[styles.card, { paddingVertical: 0, paddingHorizontal: 0, marginBottom: 24 }]}>
-          <TouchableOpacity 
-            style={[styles.menuItem, { padding: 20 }]}
-            onPress={handleSignOut}
-          >
-            <View style={styles.menuItemLeft}>
-              <MaterialIcons name="logout" size={24} color="#E53935" />
-              <Text style={[styles.menuItemText, { color: '#E53935' }]}>Sign Out</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color="#999" />
-          </TouchableOpacity>
-        </View>
+        <SignOutButton onSignOut={handleSignOut} />
       </ScrollView>
     </View>
   );

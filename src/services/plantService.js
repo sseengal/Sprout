@@ -104,7 +104,7 @@ export const identifyPlant = async (imageUri) => {
     
     console.log('Final identification result:', {
       plantName: result.suggestions?.[0]?.plant_name,
-      hasTrefleData: !!result.trefleData,
+      hasHousePlantData: !!result.housePlantData,
       careTipsCount: result.careTips?.length || 0
     });
     

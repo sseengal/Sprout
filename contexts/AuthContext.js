@@ -1,32 +1,9 @@
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { getRedirectUrl, createLogger } from '../utils/authUtils';
 
-// Get the correct redirect URL based on environment
-const getRedirectUrl = () => {
-  // For web, use the current origin + /auth/callback
-  if (Platform.OS === 'web') {
-    return window.location.origin + '/auth/callback';
-  }
-  
-  // For development with Expo web
-  if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:8081/auth/callback';
-  }
-  
-  // For production, use the production URL
-  return 'https://your-production-url.com/auth/callback';
-};
-
-// Helper function to log with timestamp and component name
-const createLogger = (component) => {
-  return (...args) => {
-    const timestamp = new Date().toISOString();
-    const message = `[${timestamp}] [${component}]`;
-    console.log(message, ...args);
-  };
-};
+// Utility functions moved to utils/authUtils.js
 
 // Create the auth context
 export const AuthContext = createContext({});
