@@ -1,14 +1,29 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const [plantName, setPlantName] = useState('');
   
   const handleProfilePress = () => {
     router.push('/(tabs)/profile');
+  };
+  
+  const handleTextSearch = () => {
+    if (!plantName.trim()) return;
+    
+    // Navigate to Analysis with the plant name for text-based search
+    router.push({
+      pathname: '/(tabs)/Analysis',
+      params: {
+        plantData: JSON.stringify({ textSearch: true }),
+        plantName: plantName.trim()
+      }
+    });
   };
   
   if (loading) {
@@ -20,7 +35,10 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <SafeAreaView style={{ backgroundColor: '#2E7D32' }}>
         <View style={styles.header}>
           <View style={styles.headerContent}>
@@ -44,26 +62,42 @@ export default function HomeScreen() {
         </View>
       </SafeAreaView>
       
-      <View style={styles.content}>
-        <Image 
-          source={{ uri: 'https://cdn.pixabay.com/photo/2017/01/10/03/06/plant-1968070_1280.png' }} 
-          style={styles.heroImage}
-          resizeMode="contain"
-        />
-        
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.welcomeText}>
-          Identify plants and get care tips instantly with your camera
+          Identify plants and get care tips instantly
         </Text>
         
-        <TouchableOpacity 
-          style={styles.ctaButton}
-          onPress={() => router.push('/(tabs)/camera')}
-        >
-          <MaterialIcons name="camera-alt" size={24} color="white" />
-          <Text style={styles.ctaButtonText}>Identify a Plant</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity 
+            style={styles.ctaButton}
+            onPress={() => router.push('/(tabs)/camera')}
+          >
+            <MaterialIcons name="camera-alt" size={24} color="white" />
+            <Text style={styles.ctaButtonText}>Identify a Plant</Text>
+          </TouchableOpacity>
+          
+          <Text style={styles.orText}>OR</Text>
+          
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Enter plant name (e.g., Monstera)"
+              value={plantName}
+              onChangeText={setPlantName}
+              onSubmitEditing={handleTextSearch}
+            />
+            <TouchableOpacity 
+              style={[styles.ctaButton, !plantName.trim() && styles.disabledButton]}
+              onPress={handleTextSearch}
+              disabled={!plantName.trim()}
+            >
+              <MaterialIcons name="search" size={24} color="white" />
+              <Text style={styles.ctaButtonText}>Search Plant</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -129,18 +163,16 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     padding: 20,
     paddingTop: 40,
+    justifyContent: 'center',
   },
-  heroImage: {
+  actionsContainer: {
     width: '100%',
-    height: 250,
-    marginBottom: 30,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    overflow: 'hidden',
+    alignItems: 'center',
+    marginTop: 20,
   },
   welcomeText: {
     fontSize: 20,
@@ -168,5 +200,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginLeft: 10,
+  },
+  orText: {
+    fontSize: 16,
+    color: '#666',
+    marginVertical: 20,
+    textAlign: 'center',
+  },
+  searchContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  searchInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    marginBottom: 15,
+  },
+  disabledButton: {
+    backgroundColor: '#a5d6a7',  // Lighter green for disabled state
+    opacity: 0.7,
   },
 });

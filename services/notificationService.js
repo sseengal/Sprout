@@ -1,9 +1,14 @@
 /**
  * Notification service for plant care reminders using Expo Notifications
+ * 
+ * NOTE: As of Expo SDK 53+, Android push notifications (remote notifications) are not supported in Expo Go.
+ * Local notifications for scheduled reminders should still work, but remote push notifications will not.
+ * This limitation only affects Expo Go and not development or production builds.
+ * See: https://docs.expo.dev/develop/development-builds/introduction/
  */
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getCareTypeIcon, getCareTypeColor } from '../utils/reminderUtils';
+import { getCareTypeColor } from '../utils/reminderUtils';
 
 // Configure notification handler
 Notifications.setNotificationHandler({

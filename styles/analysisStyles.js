@@ -1,0 +1,123 @@
+import { StyleSheet } from 'react-native';
+
+export const analysisStyles = StyleSheet.create({
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 16,
+  },
+  usageContainer: {
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+    minWidth: 120,
+    justifyContent: 'space-between',
+  },
+  usageLabel: {
+    fontSize: 14,
+    color: '#2e7d32',
+    marginRight: 6,
+    fontWeight: '500',
+  },
+  usageCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1b5e20',
+    minWidth: 24,
+    textAlign: 'center',
+    marginLeft: 4,
+  },
+  upgradeText: {
+    fontSize: 12,
+    color: '#ff6d00',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#FFF',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#888',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#AAA',
+    textAlign: 'center',
+  },
+  plantIdSection: {
+    marginTop: 24,
+    marginBottom: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginLeft: 8,
+  },
+  plantIdContent: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  plantIdPlaceholder: {
+    color: '#6c757d',
+    fontSize: 15,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  loadingContainer: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#666',
+    fontSize: 15,
+  },
+  errorContainer: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#2E7D32',
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+});

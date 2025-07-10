@@ -1,6 +1,5 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CareInstructionsSection from '../plant/CareInstructionsSection';
 import ConfidenceBadge from '../plant/ConfidenceBadge';
@@ -19,13 +18,16 @@ export default function AnalysisContent({
   handleToggleSave,
   geminiLoading,
   geminiError,
+  isTextSearch,
+  onRetry,
   // Plant.ID API related props - disabled
   // plantIdLoading,
   // plantIdError,
   // plantIdData,
   // fetchPlantHealthData,
   credits,
-  isLoadingCredits
+  isLoadingCredits,
+  analysisPhase // 'none', 'initial', 'plantnet', 'gemini', 'complete'
 }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f7f0' }} edges={['top']}>
@@ -46,7 +48,44 @@ export default function AnalysisContent({
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
         ) : null}
-        {plantInfo && (
+        
+        {/* Analysis phase loading states */}
+        {analysisPhase === 'initial' && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.loadingText}>Starting analysis...</Text>
+          </View>
+        )}
+        
+        {analysisPhase === 'plantnet' && plantData?.suggestions && (
+          <View style={styles.phaseContainer}>
+            <Text style={styles.phaseTitle}>Plant Identification</Text>
+            <Text style={styles.phaseText}>
+              Identified as: <Text style={styles.highlightText}>
+                {plantData.suggestions[0]?.plant_name || 'Unknown plant'}
+              </Text>
+            </Text>
+            {plantData.suggestions[0]?.probability > 0 && (
+              <View style={{marginTop: 8}}>
+                <ConfidenceBadge probability={Math.round(plantData.suggestions[0].probability * 100)} />
+              </View>
+            )}
+            <View style={styles.phaseLoadingContainer}>
+              <ActivityIndicator size="small" color="#4CAF50" />
+              <Text style={styles.phaseLoadingText}>Getting detailed information...</Text>
+            </View>
+          </View>
+        )}
+        
+        {analysisPhase === 'gemini' && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.loadingText}>Fetching plant details...</Text>
+            <Text style={styles.loadingSubText}>This may take a moment</Text>
+          </View>
+        )}
+        
+        {plantInfo && (analysisPhase === 'complete' || analysisPhase === 'none') && (
           <View style={{ marginBottom: 12 }}>
             {/* Common Name (from Gemini, else PlantNet) */}
             <Text style={[styles.commonName, { textAlign: 'center', marginBottom: 0 }]}>
@@ -67,14 +106,22 @@ export default function AnalysisContent({
             </View>
           </View>
         )}
-        {geminiLoading && (
+        {geminiLoading && analysisPhase === 'none' && (
           <View style={{ alignItems: 'center', marginVertical: 16 }}>
             <Text style={{ color: '#888', fontSize: 15 }}>Fetching detailed plant info...</Text>
           </View>
         )}
-        {geminiError && (
+        {geminiError && analysisPhase !== 'initial' && analysisPhase !== 'plantnet' && analysisPhase !== 'gemini' && (
           <View style={{ alignItems: 'center', marginVertical: 8 }}>
             <Text style={{ color: '#D32F2F', fontSize: 14 }}>Gemini Error: {geminiError}</Text>
+            {isTextSearch && onRetry && (
+              <TouchableOpacity 
+                style={{ marginTop: 8, padding: 8, backgroundColor: '#4CAF50', borderRadius: 4 }}
+                onPress={onRetry}
+              >
+                <Text style={{ color: 'white', fontWeight: '500' }}>Retry</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         {plantInfo ? (
@@ -113,7 +160,66 @@ const styles = StyleSheet.create({
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    marginVertical: 16,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  loadingSubText: {
+    marginTop: 6,
+    fontSize: 14,
+    color: '#888',
+  },
+  phaseContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    marginVertical: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  phaseTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 8,
+  },
+  phaseText: {
+    fontSize: 15,
+    color: '#555',
+    textAlign: 'center',
+  },
+  highlightText: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  phaseLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  phaseLoadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#888',
   },
   usageContainer: {
     backgroundColor: '#e8f5e9',
