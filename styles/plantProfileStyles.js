@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 
 export const plantProfileStyles = StyleSheet.create({
   container: {
@@ -30,6 +30,8 @@ export const plantProfileStyles = StyleSheet.create({
   },
   headerRight: {
     width: 40, // Same width as back button for balance
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backButton: {
     padding: 8,
@@ -211,5 +213,129 @@ export const plantProfileStyles = StyleSheet.create({
   bold: {
     fontWeight: '600',
     color: '#333',
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  generateNameButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    marginBottom: 20,
+    backgroundColor: '#f0f9f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+  },
+  generateNameButtonText: {
+    color: '#2E7D32',
+    marginLeft: 8,
+    fontWeight: '500',
+    fontSize: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 12,
+  },
+  imagePreviewContainer: {
+    width: '100%',
+    height: 180,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  imageButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  imageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0f9f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+    padding: 12,
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  imageButtonText: {
+    color: '#2E7D32',
+    marginLeft: 8,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  saveButton: {
+    backgroundColor: '#2E7D32',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

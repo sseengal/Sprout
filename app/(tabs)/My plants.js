@@ -1,17 +1,35 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Alert, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
 import { useReminders } from '../../contexts/ReminderContext';
 import ClearStorageButton from '../../components/debug/ClearStorageButton';
+import * as PlantStorage from '../../services/plantStorage';
 
 export default function MyPlantsScreen() {
-  const { savedPlants, removePlant } = useSavedPlants();
+  const { savedPlants, removePlant, setSavedPlants } = useSavedPlants();
   const { reminders } = useReminders();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Refresh plants data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const refreshPlants = async () => {
+        try {
+          const freshPlants = await PlantStorage.getSavedPlants();
+          setSavedPlants(freshPlants);
+        } catch (error) {
+          console.error('Error refreshing plants:', error);
+        }
+      };
+      
+      refreshPlants();
+    }, [])
+  );
 
   const handleDeletePlant = (plantId) => {
     Alert.alert(
@@ -39,7 +57,7 @@ export default function MyPlantsScreen() {
     const normalizedQuery = searchQuery.toLowerCase().trim();
     return savedPlants.filter(plant => {
       // Support both old and new data formats
-      const commonName = plant.commonName || plant.plantData?.commonName || '';
+      const commonName = plant.petName || plant.commonName || plant.plantData?.commonName || '';
       const scientificName = plant.scientificName || plant.plantData?.scientificName || '';
       
       return commonName.toLowerCase().includes(normalizedQuery) || 
@@ -63,23 +81,17 @@ export default function MyPlantsScreen() {
         />
         <View style={styles.plantInfo}>
           <Text style={styles.plantName}>
-            {/* Support both old and new data formats */}
-            {item.commonName || item.plantData?.commonName || (item.geminiData?.plantInfo?.commonName) || 'Unknown Plant'}
+            {/* If pet name exists, show only that */}
+            {item.petName || item.commonName || item.plantData?.commonName || (item.geminiData?.plantInfo?.commonName) || 'Unknown Plant'}
           </Text>
-          <Text style={styles.scientificName}>
-            {item.scientificName || item.plantData?.scientificName || (item.geminiData?.plantInfo?.scientificName) || ''}
-          </Text>
+          {/* Only show scientific name if no pet name exists */}
+          {!item.petName && (
+            <Text style={styles.scientificName}>
+              {item.scientificName || item.plantData?.scientificName || (item.geminiData?.plantInfo?.scientificName) || ''}
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
-      
-      <View style={styles.buttonsContainer}>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeletePlant(item.id)}
-        >
-          <MaterialIcons name="delete" size={24} color="#d32f2f" />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 
@@ -226,8 +238,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   plantItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 12,
@@ -238,7 +248,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   plantItemContent: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
@@ -264,16 +273,7 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
-  buttonsContainer: {
-    flexDirection: 'row',
-    alignSelf: 'stretch',
-    borderLeftWidth: 1,
-    borderLeftColor: '#eee',
-  },
-  deleteButton: {
-    padding: 12,
-    justifyContent: 'center',
-  },
+  // Button containers removed as delete functionality has been removed
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

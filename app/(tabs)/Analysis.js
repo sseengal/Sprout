@@ -329,9 +329,13 @@ export default function AnalysisScreen() {
   }
   
   // Generate a unique ID for the plant
+  // Use a consistent ID format that will be the same when retrieving from storage
   const plantId = isTextSearch ? 
-    `text-${plantName}-${Date.now()}` : 
-    ((plantData && plantData.id) || (imageUri ? imageUri : '') + (plantInfo?.scientificName || ''));
+    `text-${plantName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}` : 
+    `image-${Date.now()}-${plantInfo?.scientificName?.toLowerCase().replace(/\s+/g, '-') || ''}`;
+  
+  // Log the generated ID for debugging
+  console.log('DEBUG: Generated plant ID:', plantId);
   
   // Check if we have a saved state
   const { isPlantSaved, addPlant, removePlant } = useSavedPlants();
@@ -371,11 +375,12 @@ export default function AnalysisScreen() {
         visibilityTime: 2000,
       });
     } else {
+      // Import the standardized plant data model
+      const { createStandardPlantData } = require('../../utils/plantDataModel');
+      
       // Handle saving differently based on search type
       if (isTextSearch) {
         // For text-based searches, use the standardized plant data model
-        const { createStandardPlantData } = require('../../utils/plantDataModel');
-        
         const standardPlantData = createStandardPlantData({
           geminiData: {
             ...geminiInfo,
@@ -389,38 +394,19 @@ export default function AnalysisScreen() {
         
         addPlant(standardPlantData);
       } else {
-        // Import the standardized plant data model
-        const { createStandardPlantData } = require('../../utils/plantDataModel');
+        // For image-based searches, use the standardized plant data model
+        const standardPlantData = createStandardPlantData({
+          plantNetData: plantData,
+          geminiData: {
+            ...geminiInfo,
+            plantInfo: plantInfo
+          },
+          imageUri: imageUri || '',
+          searchType: 'image',
+          id: plantId
+        });
         
-        if (isTextSearch) {
-          // For text-based searches, use the standardized plant data model
-          const standardPlantData = createStandardPlantData({
-            geminiData: {
-              ...geminiInfo,
-              plantInfo: displayPlantInfo
-            },
-            imageUri: plantImageUrl,
-            searchType: 'text',
-            searchTerm: plantName,
-            id: plantId
-          });
-          
-          addPlant(standardPlantData);
-        } else {
-          // For image-based searches, use the standardized plant data model
-          const standardPlantData = createStandardPlantData({
-            plantNetData: plantData,
-            geminiData: {
-              ...geminiInfo,
-              plantInfo: plantInfo
-            },
-            imageUri: imageUri || '',
-            searchType: 'image',
-            id: plantId
-          });
-          
-          addPlant(standardPlantData);
-        }
+        addPlant(standardPlantData);
       }
       setSaved(true); // Update the saved state
       Toast.show({

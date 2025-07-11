@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { getRedirectUrl, createLogger } from '../utils/authUtils';
 

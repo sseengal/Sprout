@@ -76,6 +76,7 @@ export function SavedPlantsProvider({ children }) {
   return (
     <SavedPlantsContext.Provider value={{ 
       savedPlants, 
+      setSavedPlants, // Expose setSavedPlants for direct updates
       addPlant, 
       removePlant, 
       updatePlant,
