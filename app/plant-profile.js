@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSavedPlants } from '../contexts/SavedPlantsContext';
-import { useReminders } from '../contexts/ReminderContext';
-import * as PlantStorage from '../services/plantStorage';
-import Toast from 'react-native-toast-message';
-import { generatePlantPetName } from '../utils/nameGenerator';
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Toast from 'react-native-toast-message';
+import { useReminders } from '../contexts/ReminderContext';
+import { useSavedPlants } from '../contexts/SavedPlantsContext';
+import * as PlantStorage from '../services/plantStorage';
+import { generatePlantPetName } from '../utils/nameGenerator';
 
 // Import components
-import { OverviewTab, JournalTab, RemindersTab, InfoTab } from '../components/PlantProfile';
+import { InfoTab, JournalTab, OverviewTab, RemindersTab } from '../components/PlantProfile';
 
 // Import styles
 import { plantProfileStyles as styles } from '../styles/plantProfileStyles';
@@ -20,7 +20,7 @@ function PlantProfileScreen() {
   const { id } = useLocalSearchParams();
   const [plant, setPlant] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('info'); // Changed from 'overview' to 'info' for debugging
   const { removePlant } = useSavedPlants();
   const { getPlantReminders } = useReminders();
   const [plantReminders, setPlantReminders] = useState([]);
@@ -43,6 +43,10 @@ function PlantProfileScreen() {
         // Load reminders for this plant
         if (plantData) {
           const reminders = getPlantReminders(plantData.id);
+          console.log(`[DEBUG] Loading reminders for plant ${plantData.id}: found ${reminders.length}`);
+          if (reminders.length > 0) {
+            console.log('[DEBUG] First plant reminder:', JSON.stringify(reminders[0]));
+          }
           setPlantReminders(reminders);
         }
       } catch (error) {
@@ -55,6 +59,12 @@ function PlantProfileScreen() {
     loadPlant();
   }, [id, getPlantReminders]);
   
+  useEffect(() => {
+    if (plant) {
+      console.log('PlantProfileScreen plantData:', plant);
+    }
+  }, [plant]);
+
   const handleDelete = async () => {
     try {
       if (!plant?.id) return;
@@ -81,13 +91,15 @@ function PlantProfileScreen() {
   };
   
   const renderTabContent = () => {
+    if (!plant) return null;
+    
     switch (activeTab) {
       case 'overview':
         return <OverviewTab handleDelete={handleDelete} />;
       case 'journal':
-        return <JournalTab />;
+        return <JournalTab plantId={plant.id} />;
       case 'reminders':
-        return <RemindersTab plantReminders={plantReminders} />;
+        return <RemindersTab plantReminders={plantReminders} plantId={plant.id} />;
       case 'info':
         return <InfoTab plant={plant} />;
       default:

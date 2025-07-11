@@ -211,6 +211,7 @@ export default function PlantSelectorScreen() {
           ? `${selectedPlants.length} plants` 
           : selectedPlants[0]?.plantData?.commonName || selectedPlants[0]?.commonName || 'Plant'
         }
+        plantId={selectedPlants.length === 1 ? selectedPlants[0]?.id : null}
       />
       
       {/* Loading Overlay */}

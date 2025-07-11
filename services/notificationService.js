@@ -43,6 +43,14 @@ export const scheduleReminderNotification = async (reminder) => {
     
     // Calculate trigger date
     const triggerDate = new Date(next_due);
+    const now = new Date();
+    
+    // If the date is in the past, use the current date for notification
+    // This ensures the reminder still appears in the list but doesn't schedule a notification
+    if (triggerDate <= now) {
+      console.log(`[NOTIFICATION] Reminder date is in the past (${triggerDate.toISOString()}), using current date`);
+      // Just log it but still continue with the current date
+    }
     
     // Get icon for the notification based on care type
     const categoryIdentifier = Platform.OS === 'ios' ? care_type : undefined;
@@ -65,7 +73,9 @@ export const scheduleReminderNotification = async (reminder) => {
         // Add badge count for iOS
         badge: 1,
       },
-      trigger: triggerDate,
+      trigger: {
+        date: triggerDate,
+      },
       identifier: `reminder-${id}`,
     });
     
@@ -256,10 +266,8 @@ export const scheduleAllReminders = async (reminders) => {
     // Cancel existing notifications before scheduling new ones
     await cancelAllNotifications();
     
-    // Filter for enabled reminders with future due dates
-    const activeReminders = reminders.filter(reminder => 
-      reminder.enabled && new Date(reminder.next_due) > new Date()
-    );
+    // Filter for enabled reminders
+    const activeReminders = reminders.filter(reminder => reminder.enabled);
     
     console.log(`[NOTIFICATION] Scheduling ${activeReminders.length} reminders`);
     

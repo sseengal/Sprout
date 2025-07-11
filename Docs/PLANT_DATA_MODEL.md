@@ -20,6 +20,14 @@ The standardized plant data model is defined in `utils/plantDataModel.js` and in
 - `probability`: Confidence level from PlantNet (for image searches)
 - `savedAt`: When the plant was saved
 
+### Journal Entries
+- `journalEntries`: Array of journal entries for the plant
+  - `id`: Unique identifier for the entry
+  - `type`: Type of entry (e.g., 'note', 'watering', 'fertilizing')
+  - `description`: Text content of the entry
+  - `images`: Array of image objects with `uri` properties
+  - `date`: ISO timestamp when the entry was created
+
 ### Original Data
 - `plantNetData`: Original PlantNet API response data
 - `geminiData`: Original Gemini API response data
@@ -36,6 +44,10 @@ The standardization has been implemented in:
    - Enhanced to use the standardized data model
    - Provides CRUD operations for plant data
    - Handles duplicate detection consistently
+   - Manages journal entries with methods:
+     - `getJournalEntries(plantId)`: Retrieves all journal entries for a plant
+     - `addJournalEntry(plantId, entry)`: Adds a new journal entry
+     - `deleteJournalEntry(plantId, entryId)`: Removes a journal entry
 
 3. **SavedPlantsContext (`contexts/SavedPlantsContext.js`)**
    - Updated to use the enhanced storage service
@@ -45,7 +57,19 @@ The standardization has been implemented in:
    - Modified to format plant data consistently before saving
    - Ensures both search types use the same data format
 
-5. **My Plants Page (`app/(tabs)/My plants.js`)**
+5. **JournalTab Component (`components/PlantProfile/JournalTab.js`)**
+   - Manages the journal entry creation and display UI
+   - Handles image capture and selection
+   - Integrates with plant storage for persisting entries
+   - Supports entry types: note, watering, and fertilizing
+
+6. **JournalEntry Component (`components/PlantProfile/JournalEntry.js`)**
+   - Renders individual journal entries
+   - Displays entry type with appropriate icons
+   - Shows images in a horizontal scrollable list
+   - Handles date formatting and layout
+
+7. **My Plants Page (`app/(tabs)/My plants.js`)**
    - Updated to support both old and new data formats
    - Displays plant information consistently
 

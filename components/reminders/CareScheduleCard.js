@@ -130,6 +130,7 @@ const CareScheduleCard = ({ plant }) => {
         onSave={handleSaveReminder}
         reminder={editingReminder}
         plantName={plant.plantData?.commonName || 'Plant'}
+        plantId={plant.id}
       />
     </View>
   );
