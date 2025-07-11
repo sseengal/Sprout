@@ -27,7 +27,14 @@ export function ReminderProvider({ children }) {
       try {
         const storedReminders = await AsyncStorage.getItem(STORAGE_KEY);
         if (storedReminders) {
-          setReminders(JSON.parse(storedReminders));
+          const parsedReminders = JSON.parse(storedReminders);
+          console.log(`[DEBUG] Loaded ${parsedReminders.length} reminders from storage`);
+          if (parsedReminders.length > 0) {
+            console.log('[DEBUG] First stored reminder:', JSON.stringify(parsedReminders[0]));
+          }
+          setReminders(parsedReminders);
+        } else {
+          console.log('[DEBUG] No reminders found in storage');
         }
       } catch (error) {
         console.error('Error loading reminders:', error);
@@ -70,8 +77,21 @@ export function ReminderProvider({ children }) {
   // Save reminders to AsyncStorage whenever they change
   useEffect(() => {
     if (isLoaded) {
+      console.log(`[DEBUG] Saving ${reminders.length} reminders to AsyncStorage`);
+      
+      // Make sure we're not saving null or undefined
+      if (!reminders) {
+        console.error('[DEBUG] Attempted to save null/undefined reminders to AsyncStorage');
+        return;
+      }
+      
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(reminders))
-        .catch(error => console.error('Error saving reminders:', error));
+        .then(() => {
+          console.log('[DEBUG] Successfully saved reminders to AsyncStorage');
+        })
+        .catch(error => {
+          console.error('Error saving reminders:', error);
+        });
         
       // Schedule notifications for all active reminders
       NotificationService.scheduleAllReminders(reminders)
@@ -117,17 +137,34 @@ export function ReminderProvider({ children }) {
     // Only run if both reminders and plants are loaded
     if (isLoaded && savedPlants.length > 0 && reminders.length > 0) {
       // Create a set of saved plant IDs for faster lookup
-      const savedPlantIds = new Set(savedPlants.map(plant => plant.id));
+      // Convert plant IDs to strings for consistent comparison
+      const savedPlantIds = new Set(savedPlants.map(plant => String(plant.id)));
+      
+      // Debug log saved plant IDs
+      console.log('[DEBUG] Saved plant IDs:', JSON.stringify(Array.from(savedPlantIds)));
       
       // Find reminders for plants that no longer exist
-      const remindersToDelete = reminders.filter(reminder => 
-        reminder.plant_id && !savedPlantIds.has(reminder.plant_id)
-      );
+      const remindersToDelete = reminders.filter(reminder => {
+        // Skip reminders without plant_id
+        if (!reminder.plant_id) return false;
+        
+        // Convert plant_id to string for consistent comparison
+        const plantIdStr = String(reminder.plant_id);
+        const exists = savedPlantIds.has(plantIdStr);
+        
+        // Debug log for each reminder's plant existence check
+        if (!exists) {
+          console.log(`[DEBUG] Plant ID ${plantIdStr} not found in saved plants`);
+        }
+        
+        return !exists;
+      });
       
       // Delete reminders for plants that no longer exist
       if (remindersToDelete.length > 0) {
         console.log(`Removing ${remindersToDelete.length} reminders for deleted plants`);
-        // Use a timeout to avoid state update conflicts
+        
+        // Re-enable automatic removal with fixed string comparison logic
         setTimeout(() => {
           remindersToDelete.forEach(reminder => {
             // Use internal removal to avoid toast notifications for cleanup
@@ -145,25 +182,44 @@ export function ReminderProvider({ children }) {
    * Add a new reminder
    */
   const addReminder = useCallback(async (reminder) => {
+    console.log('[DEBUG] Adding new reminder:', JSON.stringify(reminder));
+    
     const newReminder = {
       id: generateReminderId(),
       created_at: new Date().toISOString(),
       ...reminder
     };
 
-    setReminders(prev => [...prev, newReminder]);
+    console.log('[DEBUG] Created new reminder with ID:', newReminder.id);
+    
+    // Explicitly save to AsyncStorage to ensure persistence
+    setReminders(prev => {
+      const updatedReminders = [...prev, newReminder];
+      console.log(`[DEBUG] Updated reminders state, now has ${updatedReminders.length} reminders`);
+      
+      // Force save to AsyncStorage immediately
+      if (isLoaded) {
+        console.log('[DEBUG] Force saving reminders to AsyncStorage');
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedReminders))
+          .then(() => console.log('[DEBUG] Force save successful'))
+          .catch(err => console.error('[DEBUG] Force save failed:', err));
+      }
+      
+      return updatedReminders;
+    });
     
     // Schedule notification for the new reminder
     if (newReminder.enabled !== false) {
       try {
         await NotificationService.scheduleReminderNotification(newReminder);
+        console.log('[DEBUG] Scheduled notification for new reminder');
       } catch (error) {
         console.error('Error scheduling notification for new reminder:', error);
       }
     }
     
     return newReminder;
-  }, []);
+  }, [isLoaded]);
 
   /**
    * Update an existing reminder
@@ -322,7 +378,18 @@ export function ReminderProvider({ children }) {
    * Get reminders for a specific plant
    */
   const getPlantReminders = useCallback((plantId) => {
-    return reminders.filter(reminder => reminder.plant_id === plantId);
+    if (!plantId) {
+      console.log('[DEBUG] getPlantReminders called with null/undefined plantId');
+      return [];
+    }
+    
+    const filteredReminders = reminders.filter(reminder => {
+      // Convert both to strings for comparison to handle potential type mismatches
+      return String(reminder.plant_id) === String(plantId);
+    });
+    
+    console.log(`[DEBUG] getPlantReminders for plant ${plantId}: found ${filteredReminders.length}`);
+    return filteredReminders;
   }, [reminders]);
   
   /**
@@ -360,9 +427,26 @@ export function ReminderProvider({ children }) {
   }, []);
 
   /**
-   * Generate default reminders for a plant based on plant type
+   * Reload reminders from AsyncStorage
    */
-  // generateDefaultReminders function removed
+  const reloadReminders = useCallback(async () => {
+    console.log('[DEBUG] Explicitly reloading reminders from AsyncStorage');
+    try {
+      const storedReminders = await AsyncStorage.getItem(STORAGE_KEY);
+      if (storedReminders) {
+        const parsedReminders = JSON.parse(storedReminders);
+        console.log(`[DEBUG] Reloaded ${parsedReminders.length} reminders from storage`);
+        setReminders(parsedReminders);
+        return parsedReminders;
+      } else {
+        console.log('[DEBUG] No reminders found in storage during reload');
+        return [];
+      }
+    } catch (error) {
+      console.error('Error reloading reminders:', error);
+      return [];
+    }
+  }, []);
 
   // Context value
   const value = {
@@ -376,7 +460,7 @@ export function ReminderProvider({ children }) {
     getActiveReminders,
     areAllRemindersEnabled,
     completeReminder,
-    // generateDefaultReminders removed as the function no longer exists
+    reloadReminders,
     isLoaded
   };
 

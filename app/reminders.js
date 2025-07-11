@@ -18,6 +18,10 @@ import ReminderItem from '../components/reminders/ReminderItem';
 import ReminderModal from '../components/reminders/ReminderModal';
 import RemindersHeader from '../components/common/RemindersHeader';
 import * as NotificationService from '../services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Use the same storage key as in ReminderContext
+const STORAGE_KEY = 'SPROUT_CARE_REMINDERS';
 
 /**
  * Care Reminders page
@@ -30,7 +34,8 @@ export default function RemindersScreen() {
     areAllRemindersEnabled,
     deleteReminder,
     completeReminder,
-    updateReminder
+    updateReminder,
+    reloadReminders
   } = useReminders();
   
   const { savedPlants } = useSavedPlants();
@@ -45,31 +50,14 @@ export default function RemindersScreen() {
     setAllEnabled(areAllRemindersEnabled());
   }, [reminders, areAllRemindersEnabled]);
   
-  // Filter out reminders for plants that have been deleted
+  // NOTE: Cleanup of reminders for deleted plants is now handled in ReminderContext.js
+  // This prevents duplicate cleanup operations that were causing reminders to disappear
   useEffect(() => {
-    const checkForDeletedPlantReminders = async () => {
-      // Create a set of saved plant IDs for faster lookup
-      const savedPlantIds = new Set(savedPlants.map(plant => plant.id));
-      
-      // Find reminders for plants that no longer exist
-      const remindersToDelete = reminders.filter(reminder => 
-        reminder.plant_id && !savedPlantIds.has(reminder.plant_id)
-      );
-      
-      // Delete reminders for plants that no longer exist
-      if (remindersToDelete.length > 0) {
-        console.log(`Removing ${remindersToDelete.length} reminders for deleted plants`);
-        remindersToDelete.forEach(reminder => {
-          deleteReminder(reminder.id);
-        });
-      }
-    };
-    
-    // Only run this check when reminders or saved plants change
-    if (reminders.length > 0) {
-      checkForDeletedPlantReminders();
+    if (reminders.length > 0 && savedPlants.length > 0) {
+      console.log(`[DEBUG] Reminders.js - ${reminders.length} reminders loaded, ${savedPlants.length} plants loaded`);
+      console.log('[DEBUG] Reminders.js - Cleanup of orphaned reminders is handled in ReminderContext.js');
     }
-  }, [reminders, savedPlants, deleteReminder]);
+  }, [reminders.length, savedPlants.length]);
   
   // Handle toggle all reminders
   const handleToggleAll = (value) => {
@@ -90,13 +78,60 @@ export default function RemindersScreen() {
     setCurrentReminder(null);
   };
   
+  // Add debug logging for reminders
+  useEffect(() => {
+    console.log(`[DEBUG] Reminders count: ${reminders.length}`);
+    if (reminders.length > 0) {
+      console.log('[DEBUG] First reminder:', JSON.stringify(reminders[0]));
+    }
+  }, [reminders]);
+  
+  // Force refresh reminders when component mounts or when focused
+  useEffect(() => {
+    console.log('[DEBUG] Reminders screen mounted, reloading reminders');
+    // Use the reloadReminders function from context
+    reloadReminders()
+      .then(loadedReminders => {
+        console.log(`[DEBUG] Successfully reloaded ${loadedReminders.length} reminders`);
+      })
+      .catch(error => console.error('Error reloading reminders:', error));
+  }, []);
+  
+  // Also reload when the screen is focused
+  useEffect(() => {
+    const unsubscribe = router?.addListener?.('focus', () => {
+      console.log('[DEBUG] Reminders screen focused, reloading reminders');
+      reloadReminders()
+        .catch(error => console.error('Error reloading reminders on focus:', error));
+    });
+    
+    // Only attempt to unsubscribe if the listener was successfully added
+    return () => {
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [router]);
+  
+  // Debug log reminders before grouping
+  useEffect(() => {
+    console.log(`[DEBUG] Total reminders before grouping: ${reminders.length}`);
+    if (reminders.length > 0) {
+      console.log('[DEBUG] First reminder:', JSON.stringify(reminders[0]));
+      console.log('[DEBUG] Reminder plant_id type:', typeof reminders[0].plant_id);
+    }
+  }, [reminders]);
+
   // Group reminders by plant
   const remindersByPlant = reminders.reduce((acc, reminder) => {
-    const plantId = reminder.plant_id;
+    // Use a default plant ID for reminders without one
+    // Convert plant_id to string to ensure consistent comparison
+    const plantId = reminder.plant_id ? String(reminder.plant_id) : 'unknown';
+    
     if (!acc[plantId]) {
       acc[plantId] = {
         plantId,
-        plantName: reminder.plant_name,
+        plantName: reminder.plant_name || 'Unknown Plant',
         reminders: []
       };
     }
@@ -105,6 +140,12 @@ export default function RemindersScreen() {
   }, {});
   
   const plantGroups = Object.values(remindersByPlant);
+  
+  // Debug log plant groups
+  useEffect(() => {
+    console.log(`[DEBUG] Plant groups count: ${plantGroups.length}`);
+    console.log('[DEBUG] Plant groups:', JSON.stringify(Object.keys(remindersByPlant)));
+  }, [plantGroups]);
   
   // Navigate to plant details
   const navigateToPlant = (plantId) => {
@@ -307,6 +348,7 @@ export default function RemindersScreen() {
         onClose={() => setEditModalVisible(false)}
         onSave={handleSaveReminder}
         reminder={currentReminder}
+        plantId={currentReminder?.plant_id}
       />
     </SafeAreaView>
   );
