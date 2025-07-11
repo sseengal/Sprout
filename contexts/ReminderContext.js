@@ -101,14 +101,27 @@ export function ReminderProvider({ children }) {
   
   // Load saved plants and keep them in sync
   useEffect(() => {
+    // Import the correct storage key from plantStorage.js
+    const SAVED_PLANTS_KEY = '@saved_plants';
+    
     const loadSavedPlants = async () => {
       try {
-        const data = await AsyncStorage.getItem('SPROUT_SAVED_PLANTS');
+        console.log('[DEBUG] Loading saved plants using key:', SAVED_PLANTS_KEY);
+        const data = await AsyncStorage.getItem(SAVED_PLANTS_KEY);
         if (data) {
-          setSavedPlants(JSON.parse(data));
+          const plants = JSON.parse(data);
+          console.log(`[DEBUG] Loaded ${plants.length} saved plants`);
+          if (plants.length > 0) {
+            console.log('[DEBUG] First plant ID:', plants[0].id);
+          }
+          setSavedPlants(plants);
+        } else {
+          console.log('[DEBUG] No saved plants found in storage');
+          setSavedPlants([]);
         }
       } catch (error) {
         console.error('Error loading saved plants in ReminderContext:', error);
+        setSavedPlants([]);
       }
     };
     
@@ -117,9 +130,17 @@ export function ReminderProvider({ children }) {
     // Set up listener for saved plants changes
     const savedPlantsListener = async () => {
       try {
-        const data = await AsyncStorage.getItem('SPROUT_SAVED_PLANTS');
+        const data = await AsyncStorage.getItem(SAVED_PLANTS_KEY);
         if (data) {
-          setSavedPlants(JSON.parse(data));
+          const plants = JSON.parse(data);
+          // Only update if the number of plants has changed to avoid unnecessary re-renders
+          setSavedPlants(prevPlants => {
+            if (prevPlants.length !== plants.length) {
+              console.log(`[DEBUG] Plants count changed: ${prevPlants.length} -> ${plants.length}`);
+              return plants;
+            }
+            return prevPlants;
+          });
         }
       } catch (error) {
         console.error('Error in saved plants listener:', error);
@@ -132,49 +153,82 @@ export function ReminderProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
   
-  // Clean up reminders for deleted plants
+  // Clean up reminders for deleted plants - with extra caution
   useEffect(() => {
     // Only run if both reminders and plants are loaded
-    if (isLoaded && savedPlants.length > 0 && reminders.length > 0) {
-      // Create a set of saved plant IDs for faster lookup
-      // Convert plant IDs to strings for consistent comparison
-      const savedPlantIds = new Set(savedPlants.map(plant => String(plant.id)));
-      
-      // Debug log saved plant IDs
-      console.log('[DEBUG] Saved plant IDs:', JSON.stringify(Array.from(savedPlantIds)));
-      
-      // Find reminders for plants that no longer exist
-      const remindersToDelete = reminders.filter(reminder => {
-        // Skip reminders without plant_id
-        if (!reminder.plant_id) return false;
-        
-        // Convert plant_id to string for consistent comparison
-        const plantIdStr = String(reminder.plant_id);
-        const exists = savedPlantIds.has(plantIdStr);
-        
-        // Debug log for each reminder's plant existence check
-        if (!exists) {
-          console.log(`[DEBUG] Plant ID ${plantIdStr} not found in saved plants`);
-        }
-        
-        return !exists;
-      });
-      
-      // Delete reminders for plants that no longer exist
-      if (remindersToDelete.length > 0) {
-        console.log(`Removing ${remindersToDelete.length} reminders for deleted plants`);
-        
-        // Re-enable automatic removal with fixed string comparison logic
-        setTimeout(() => {
-          remindersToDelete.forEach(reminder => {
-            // Use internal removal to avoid toast notifications for cleanup
-            setReminders(prev => prev.filter(r => r.id !== reminder.id));
-            // Cancel any notifications
-            NotificationService.cancelNotification(reminder.id)
-              .catch(error => console.error(`Error cancelling notification for reminder ${reminder.id}:`, error));
-          });
-        }, 0);
+    if (!isLoaded) {
+      console.log('[DEBUG] Skipping cleanup - reminders not fully loaded yet');
+      return;
+    }
+    
+    if (savedPlants.length === 0) {
+      console.log('[DEBUG] Skipping cleanup - no saved plants available');
+      return;
+    }
+    
+    if (reminders.length === 0) {
+      console.log('[DEBUG] Skipping cleanup - no reminders to check');
+      return;
+    }
+    
+    console.log(`[DEBUG] Starting cleanup check with ${savedPlants.length} plants and ${reminders.length} reminders`);
+    
+    // Create a set of saved plant IDs for faster lookup
+    // Convert plant IDs to strings for consistent comparison
+    const savedPlantIds = new Set(savedPlants.map(plant => String(plant.id)));
+    
+    // Debug log saved plant IDs
+    console.log('[DEBUG] Saved plant IDs:', JSON.stringify(Array.from(savedPlantIds)));
+    
+    // Log all reminder plant IDs for debugging
+    const reminderPlantIds = reminders
+      .filter(r => r.plant_id)
+      .map(r => String(r.plant_id));
+    console.log('[DEBUG] Reminder plant IDs:', JSON.stringify(reminderPlantIds));
+    
+    // Find reminders for plants that no longer exist
+    const remindersToDelete = reminders.filter(reminder => {
+      // Skip reminders without plant_id
+      if (!reminder.plant_id) {
+        console.log('[DEBUG] Skipping reminder without plant_id:', reminder.id);
+        return false;
       }
+      
+      // Convert plant_id to string for consistent comparison
+      const plantIdStr = String(reminder.plant_id);
+      const exists = savedPlantIds.has(plantIdStr);
+      
+      // Debug log for each reminder's plant existence check
+      if (!exists) {
+        console.log(`[DEBUG] Plant ID ${plantIdStr} not found in saved plants for reminder ${reminder.id}`);
+        console.log('[DEBUG] Reminder details:', JSON.stringify(reminder));
+      }
+      
+      return !exists;
+    });
+    
+    // Delete reminders for plants that no longer exist
+    if (remindersToDelete.length > 0) {
+      console.log(`[DEBUG] Found ${remindersToDelete.length} reminders for deleted plants`);
+      console.log('[DEBUG] Reminders to delete:', JSON.stringify(remindersToDelete.map(r => ({ id: r.id, plant_id: r.plant_id }))));
+      
+      // IMPORTANT: For now, log but don't actually delete
+      // This will help us debug the issue without losing data
+      console.log('[DEBUG] ⚠️ Automatic deletion is DISABLED for debugging');
+      
+      /* Temporarily disabled for debugging
+      setTimeout(() => {
+        remindersToDelete.forEach(reminder => {
+          // Use internal removal to avoid toast notifications for cleanup
+          setReminders(prev => prev.filter(r => r.id !== reminder.id));
+          // Cancel any notifications
+          NotificationService.cancelNotification(reminder.id)
+            .catch(error => console.error(`Error cancelling notification for reminder ${reminder.id}:`, error));
+        });
+      }, 0);
+      */
+    } else {
+      console.log('[DEBUG] No orphaned reminders found');
     }
   }, [savedPlants, reminders, isLoaded]);
 

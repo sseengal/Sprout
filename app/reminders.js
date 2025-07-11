@@ -149,8 +149,14 @@ export default function RemindersScreen() {
   
   // Navigate to plant details
   const navigateToPlant = (plantId) => {
-    const plant = savedPlants.find(p => p.id === plantId);
+    // Convert plantId to string for consistent comparison
+    const plantIdStr = String(plantId);
+    console.log(`[DEBUG] Navigating to plant with ID: ${plantIdStr}`);
+    
+    // Convert all plant IDs to strings for consistent comparison
+    const plant = savedPlants.find(p => String(p.id) === plantIdStr);
     if (plant) {
+      console.log(`[DEBUG] Found plant: ${plant.plantName || 'Unknown'}`);
       router.push({
         pathname: '/(tabs)/Analysis',
         params: { 
@@ -160,6 +166,8 @@ export default function RemindersScreen() {
           savedGeminiInfo: plant.plantData.geminiInfo
         }
       });
+    } else {
+      console.log(`[DEBUG] Plant not found with ID: ${plantIdStr}`);
     }
   };
   
