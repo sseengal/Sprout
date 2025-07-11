@@ -16,6 +16,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { calculateNextDueDate, getFrequencyLabel } from '../../utils/reminderUtils';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import Toast from 'react-native-toast-message';
 
 /**
  * Modal for adding or editing reminders
@@ -25,7 +26,8 @@ const ReminderModal = ({
   onClose, 
   onSave, 
   reminder = null,
-  plantName = ''
+  plantName = '',
+  plantId = null
 }) => {
   // Default values for a new reminder
   const defaultValues = {
@@ -33,6 +35,7 @@ const ReminderModal = ({
     frequency_days: 7,
     enabled: true,
     plant_name: plantName,
+    plant_id: plantId, // Ensure plant_id is always included
     notes: '',
     reminder_time: new Date().setHours(9, 0, 0, 0) // Default to 9:00 AM
   };
@@ -82,6 +85,8 @@ const ReminderModal = ({
   
   // These handlers are now handled directly in the DateTimePickerModal components
   
+  // Removed state for validation error
+
   // Handle save button
   const handleSave = () => {
     // Combine selected date and time
@@ -92,6 +97,19 @@ const ReminderModal = ({
       0,
       0
     );
+    
+    // Validate that the date is not in the past
+    const now = new Date();
+    if (combinedDateTime <= now) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Date',
+        text2: 'Reminder date and time must be in the future',
+        position: 'bottom',
+        visibilityTime: 3000
+      });
+      return;
+    }
     
     onSave({
       ...formValues,
@@ -236,8 +254,9 @@ const ReminderModal = ({
                   ))}
                 </View>
                 
-                {/* Date and Time Pickers */}
+                {/* Date and Time Selection */}
                 <Text style={styles.sectionTitle}>Reminder Date & Time</Text>
+                {/* Removed inline error message */}
                 <View style={styles.dateTimeContainer}>
                   <TouchableOpacity 
                     style={[styles.datePickerButton, styles.dateButton]}
@@ -573,6 +592,12 @@ const styles = StyleSheet.create({
   iosPicker: {
     height: 216,
     backgroundColor: '#FFFFFF',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginBottom: 8,
+    fontWeight: '500',
   },
 });
 

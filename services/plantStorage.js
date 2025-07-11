@@ -237,5 +237,78 @@ export const updatePlant = async (plantId, updatedData) => {
   }
 };
 
+/**
+ * Get all journal entries for a specific plant
+ * @param {string} plantId - The ID of the plant
+ * @returns {Promise<Array>} Array of journal entries
+ */
+export const getJournalEntries = async (plantId) => {
+  const plants = await getSavedPlants();
+  const plant = plants.find(p => p.id === plantId);
+  return plant?.journalEntries || [];
+};
+
+/**
+ * Add a new journal entry to a plant
+ * @param {string} plantId - The ID of the plant
+ * @param {Object} entry - The journal entry to add
+ * @param {string} entry.title - Entry title
+ * @param {string} entry.description - Entry description
+ * @param {string} entry.type - Entry type (e.g., 'note', 'watering')
+ * @param {Array} entry.images - Array of image URIs
+ * @returns {Promise<Object>} The updated plant
+ */
+export const addJournalEntry = async (plantId, entry) => {
+  const plants = await getSavedPlants();
+  const plantIndex = plants.findIndex(p => p.id === plantId);
+  
+  if (plantIndex === -1) {
+    throw new Error('Plant not found');
+  }
+
+  const updatedPlant = {
+    ...plants[plantIndex],
+    journalEntries: [
+      {
+        ...entry,
+        id: String(Date.now()),
+        createdAt: Date.now(),
+        date: entry.date || new Date().toISOString()
+      },
+      ...(plants[plantIndex].journalEntries || [])
+    ]
+  };
+
+  plants[plantIndex] = updatedPlant;
+  await storage.setItem(SAVED_PLANTS_KEY, JSON.stringify(plants));
+  return updatedPlant;
+};
+
+/**
+ * Delete a journal entry
+ * @param {string} plantId - The ID of the plant
+ * @param {string} entryId - The ID of the entry to delete
+ * @returns {Promise<Object>} The updated plant
+ */
+export const deleteJournalEntry = async (plantId, entryId) => {
+  const plants = await getSavedPlants();
+  const plantIndex = plants.findIndex(p => p.id === plantId);
+  
+  if (plantIndex === -1) {
+    throw new Error('Plant not found');
+  }
+
+  const updatedPlant = {
+    ...plants[plantIndex],
+    journalEntries: (plants[plantIndex].journalEntries || []).filter(
+      entry => entry.id !== entryId
+    )
+  };
+
+  plants[plantIndex] = updatedPlant;
+  await storage.setItem(SAVED_PLANTS_KEY, JSON.stringify(plants));
+  return updatedPlant;
+};
+
 // Export storage for testing
 export { storage as AsyncStorage };

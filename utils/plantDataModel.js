@@ -58,6 +58,9 @@ export const createStandardPlantData = (options) => {
     searchTerm,
     probability: probability || null,
     
+    // Journal entries
+    journalEntries: [],
+    
     // Timestamps
     savedAt: Date.now(),
     
