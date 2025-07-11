@@ -5,6 +5,7 @@ import { Alert, FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
 import { useReminders } from '../../contexts/ReminderContext';
+import ClearStorageButton from '../../components/debug/ClearStorageButton';
 
 export default function MyPlantsScreen() {
   const { savedPlants, removePlant } = useSavedPlants();
@@ -37,8 +38,9 @@ export default function MyPlantsScreen() {
     
     const normalizedQuery = searchQuery.toLowerCase().trim();
     return savedPlants.filter(plant => {
-      const commonName = plant.plantData?.commonName || '';
-      const scientificName = plant.plantData?.scientificName || '';
+      // Support both old and new data formats
+      const commonName = plant.commonName || plant.plantData?.commonName || '';
+      const scientificName = plant.scientificName || plant.plantData?.scientificName || '';
       
       return commonName.toLowerCase().includes(normalizedQuery) || 
              scientificName.toLowerCase().includes(normalizedQuery);
@@ -50,13 +52,8 @@ export default function MyPlantsScreen() {
       <TouchableOpacity
         style={styles.plantItemContent}
         onPress={() => router.push({
-          pathname: '/(tabs)/Analysis',
-          params: { 
-            plantData: JSON.stringify(item.plantData),
-            imageUri: item.imageUri,
-            isSavedView: true,  // Mark this as a saved plant view
-            savedGeminiInfo: item.plantData.geminiInfo ? JSON.stringify(item.plantData.geminiInfo) : null  // Stringify the Gemini data
-          }
+          pathname: '/plant-profile',
+          params: { id: item.id }
         })}
       >
         <Image 
@@ -66,10 +63,11 @@ export default function MyPlantsScreen() {
         />
         <View style={styles.plantInfo}>
           <Text style={styles.plantName}>
-            {item.plantData.commonName || 'Unknown Plant'}
+            {/* Support both old and new data formats */}
+            {item.commonName || item.plantData?.commonName || (item.geminiData?.plantInfo?.commonName) || 'Unknown Plant'}
           </Text>
           <Text style={styles.scientificName}>
-            {item.plantData.scientificName || ''}
+            {item.scientificName || item.plantData?.scientificName || (item.geminiData?.plantInfo?.scientificName) || ''}
           </Text>
         </View>
       </TouchableOpacity>
@@ -146,6 +144,9 @@ export default function MyPlantsScreen() {
             </Text>
           </View>
         )}
+        
+        {/* Debug button to clear storage */}
+        <ClearStorageButton />
       </View>
       
 

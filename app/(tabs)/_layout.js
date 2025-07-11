@@ -25,6 +25,7 @@ function ProtectedTabs() {
           borderTopColor: '#eee',
         },
       }}
+      initialRouteName="My plants"
     >
       <Tabs.Screen
         name="index"

@@ -1,228 +1,219 @@
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
+import Toast from 'react-native-toast-message';
+import { getPlantDetails, fetchPlantImage } from '../../utils/analysisUtils';
+import { createStandardPlantData } from '../../utils/plantDataModel';
+import { extractPlantInfo } from '../../utils/plantDetails';
 
 export default function HomeScreen() {
-  const router = useRouter();
-  const { user, loading } = useAuth();
   const [plantName, setPlantName] = useState('');
-  
-  const handleProfilePress = () => {
-    router.push('/(tabs)/profile');
-  };
-  
-  const handleTextSearch = () => {
-    if (!plantName.trim()) return;
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const onSearch = async () => {
+    if (!plantName.trim()) {
+      return;
+    }
     
-    // Navigate to Analysis with the plant name for text-based search
-    router.push({
-      pathname: '/(tabs)/Analysis',
-      params: {
-        plantData: JSON.stringify({ textSearch: true }),
-        plantName: plantName.trim()
+    setLoading(true);
+    try {
+      // Get plant details from Gemini
+      const geminiResponse = await getPlantDetails(plantName);
+      
+      if (!geminiResponse) {
+        throw new Error('Could not get plant information');
       }
-    });
+      
+      // Fetch a plant image
+      const imageUrl = await fetchPlantImage(plantName);
+      
+      // Extract plant info from Gemini response
+      const plantInfo = extractPlantInfo(geminiResponse);
+      
+      // Create standardized plant data
+      const standardPlantData = createStandardPlantData({
+        geminiData: {
+          ...geminiResponse,
+          plantInfo: plantInfo
+        },
+        imageUri: imageUrl,
+        searchType: 'text',
+        searchTerm: plantName
+      });
+      
+      // Add explicit flag for text search that Analysis page is looking for
+      standardPlantData.textSearch = true;
+      
+      console.log('DEBUG: Home page sending text search data:', {
+        plantName,
+        hasGeminiData: !!geminiResponse,
+        hasImageUrl: !!imageUrl,
+        standardPlantData: JSON.stringify(standardPlantData)
+      });
+      
+      // Navigate to Analysis screen with the data
+      router.push({
+        pathname: '/(tabs)/Analysis',
+        params: {
+          plantData: JSON.stringify(standardPlantData),
+          plantName: plantName,
+          savedGeminiInfo: JSON.stringify(geminiResponse),
+          imageUri: imageUrl,
+          isTextSearch: 'true' // Add explicit param flag for text search
+        }
+      });
+    } catch (error) {
+      console.error('Error searching for plant:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Search failed',
+        text2: error.message || 'Could not find information about this plant',
+        position: 'top',
+        visibilityTime: 3000
+      });
+    } finally {
+      setLoading(false);
+    }
   };
-  
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#2E7D32" />
-      </View>
-    );
-  }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <SafeAreaView style={{ backgroundColor: '#2E7D32' }}>
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.title}>Sprout</Text>
-              <Text style={styles.subtitle}>Your Personal Plant Care Assistant</Text>
-            </View>
-            <TouchableOpacity onPress={handleProfilePress} style={styles.profileButton}>
-              {user?.user_metadata?.avatar_url ? (
-                <Image 
-                  source={{ uri: user.user_metadata.avatar_url }} 
-                  style={styles.avatar} 
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                  <MaterialIcons name="person" size={24} color="#fff" />
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Plant Search</Text>
+        <Text style={styles.subtitle}>Search for plants by name</Text>
+      </View>
       
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.welcomeText}>
-          Identify plants and get care tips instantly
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter plant name..."
+          value={plantName}
+          onChangeText={setPlantName}
+          onSubmitEditing={onSearch}
+        />
+        <TouchableOpacity 
+          style={styles.searchButton} 
+          onPress={onSearch}
+          disabled={loading || !plantName.trim()}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <MaterialIcons name="search" size={24} color="#fff" />
+          )}
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.infoContainer}>
+        <MaterialIcons name="info-outline" size={24} color="#2E7D32" style={styles.infoIcon} />
+        <Text style={styles.infoText}>
+          Enter the name of a plant to search for information about it. You can search by common name or scientific name.
         </Text>
-        
-        <View style={styles.actionsContainer}>
+      </View>
+      
+      <View style={styles.tipsContainer}>
+        <Text style={styles.tipsTitle}>Popular searches:</Text>
+        {['Rose', 'Sunflower', 'Aloe Vera', 'Monstera'].map((plant, index) => (
           <TouchableOpacity 
-            style={styles.ctaButton}
-            onPress={() => router.push('/(tabs)/camera')}
+            key={index}
+            style={styles.tipButton}
+            onPress={() => {
+              setPlantName(plant);
+              onSearch();
+            }}
           >
-            <MaterialIcons name="camera-alt" size={24} color="white" />
-            <Text style={styles.ctaButtonText}>Identify a Plant</Text>
+            <Text style={styles.tipText}>{plant}</Text>
           </TouchableOpacity>
-          
-          <Text style={styles.orText}>OR</Text>
-          
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Enter plant name (e.g., Monstera)"
-              value={plantName}
-              onChangeText={setPlantName}
-              onSubmitEditing={handleTextSearch}
-            />
-            <TouchableOpacity 
-              style={[styles.ctaButton, !plantName.trim() && styles.disabledButton]}
-              onPress={handleTextSearch}
-              disabled={!plantName.trim()}
-            >
-              <MaterialIcons name="search" size={24} color="white" />
-              <Text style={styles.ctaButtonText}>Search Plant</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
   },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  contentContainer: {
+    padding: 20,
   },
   header: {
-    paddingTop: 8,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    backgroundColor: '#2E7D32',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
-  welcomeText: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 16,
-  },
-  userName: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  profileButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 30,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 2,
+    color: '#2E7D32',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  content: {
-    flexGrow: 1,
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 40,
-    justifyContent: 'center',
-  },
-  actionsContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  welcomeText: {
-    fontSize: 20,
-    textAlign: 'center',
-    color: '#333',
-    marginBottom: 30,
-    lineHeight: 28,
-  },
-  ctaButton: {
-    flexDirection: 'row',
-    backgroundColor: '#2E7D32',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  ctaButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  orText: {
     fontSize: 16,
     color: '#666',
-    marginVertical: 20,
-    textAlign: 'center',
   },
   searchContainer: {
-    width: '100%',
-    alignItems: 'center',
+    flexDirection: 'row',
+    marginBottom: 24,
   },
-  searchInput: {
-    width: '100%',
+  input: {
+    flex: 1,
+    height: 50,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    marginBottom: 15,
   },
-  disabledButton: {
-    backgroundColor: '#a5d6a7',  // Lighter green for disabled state
-    opacity: 0.7,
+  searchButton: {
+    width: 50,
+    height: 50,
+    backgroundColor: '#2E7D32',
+    borderRadius: 8,
+    marginLeft: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#e8f5e9',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+  },
+  infoIcon: {
+    marginRight: 12,
+  },
+  infoText: {
+    flex: 1,
+    color: '#2E7D32',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  tipsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#333',
+  },
+  tipButton: {
+    backgroundColor: '#e8f5e9',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  tipText: {
+    color: '#2E7D32',
+    fontSize: 14,
   },
 });

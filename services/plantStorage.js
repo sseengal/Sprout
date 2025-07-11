@@ -1,5 +1,6 @@
 // Import AsyncStorage
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createStandardPlantData, isValidPlantData } from '../utils/plantDataModel';
 
 // Simple storage wrapper
 const storage = {
@@ -99,8 +100,8 @@ const transformPlantData = (plantData) => {
 };
 
 /**
- * Saves a plant to local storage
- * @param {Object} plantData - The plant data to save
+ * Saves a plant to local storage using the standardized model
+ * @param {Object} plantData - The plant data or options for creating standardized plant data
  * @returns {Promise<Object>} The saved plant object
  */
 export const savePlant = async (plantData) => {
@@ -109,13 +110,18 @@ export const savePlant = async (plantData) => {
     const existingPlants = await storage.getItem(SAVED_PLANTS_KEY);
     const plants = existingPlants ? JSON.parse(existingPlants) : [];
 
-    // Transform the plant data
-    const plantToSave = transformPlantData(plantData);
+    // Convert to standardized format if needed
+    const plantToSave = isValidPlantData(plantData) 
+      ? plantData 
+      : createStandardPlantData(plantData);
     
-    // Check for duplicates by name and scientific name
+    // Check for duplicates by id, scientific name, or image+name combination
     const isDuplicate = plants.some(plant => 
-      plant.plantName === plantToSave.plantName || 
-      plant.scientificName === plantToSave.scientificName
+      (plantToSave.id && plant.id === plantToSave.id) ||
+      (plantToSave.scientificName && plant.scientificName === plantToSave.scientificName) ||
+      (plantToSave.imageUri && plantToSave.commonName && 
+       plant.imageUri === plantToSave.imageUri && 
+       plant.commonName === plantToSave.commonName)
     );
 
     if (isDuplicate) {
@@ -150,6 +156,21 @@ export const getSavedPlants = async () => {
 };
 
 /**
+ * Retrieves a specific plant by ID
+ * @param {string} plantId - The ID of the plant to retrieve
+ * @returns {Promise<Object|null>} The plant object or null if not found
+ */
+export const getPlantById = async (plantId) => {
+  try {
+    const plants = await getSavedPlants();
+    return plants.find(plant => plant.id === plantId) || null;
+  } catch (error) {
+    console.error('Error getting plant by ID:', error);
+    return null;
+  }
+};
+
+/**
  * Deletes a saved plant by ID
  * @param {string} plantId - The ID of the plant to delete
  * @returns {Promise<boolean>} True if deletion was successful
@@ -160,17 +181,59 @@ export const deletePlant = async (plantId) => {
     let plants = savedPlants ? JSON.parse(savedPlants) : [];
     
     const initialLength = plants.length;
-    plants = plants.filter(plant => plant.id !== plantId);
+    plants = plants.filter(plant => plant.id !== String(plantId));
     
     if (plants.length === initialLength) {
       return false; // No plant was deleted
     }
     
     await storage.setItem(SAVED_PLANTS_KEY, JSON.stringify(plants));
+    
+    // Publish event for other contexts to detect
+    await AsyncStorage.setItem('PLANT_DELETED_EVENT', JSON.stringify({
+      plantId: String(plantId),
+      timestamp: Date.now()
+    }));
+    
     return true;
   } catch (error) {
     console.error('Error deleting plant:', error);
     return false;
+  }
+};
+
+/**
+ * Updates an existing plant
+ * @param {string} plantId - The ID of the plant to update
+ * @param {Object} updatedData - The new data to merge with existing plant data
+ * @returns {Promise<Object|null>} The updated plant or null if not found
+ */
+export const updatePlant = async (plantId, updatedData) => {
+  try {
+    const savedPlants = await storage.getItem(SAVED_PLANTS_KEY);
+    let plants = savedPlants ? JSON.parse(savedPlants) : [];
+    
+    const plantIndex = plants.findIndex(plant => plant.id === String(plantId));
+    
+    if (plantIndex === -1) {
+      return null; // Plant not found
+    }
+    
+    // Merge the updated data with the existing plant
+    const updatedPlant = {
+      ...plants[plantIndex],
+      ...updatedData,
+      id: plants[plantIndex].id, // Ensure ID doesn't change
+      updatedAt: Date.now()
+    };
+    
+    plants[plantIndex] = updatedPlant;
+    
+    await storage.setItem(SAVED_PLANTS_KEY, JSON.stringify(plants));
+    return updatedPlant;
+  } catch (error) {
+    console.error('Error updating plant:', error);
+    return null;
   }
 };
 

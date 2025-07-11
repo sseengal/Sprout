@@ -15,17 +15,51 @@ export default function AnalysisScreen() {
   const searchParams = useLocalSearchParams();
   const router = useRouter();
   let plantData, imageUri, isTextSearch = false, plantName;
+  
+  // Add debug logging
+  console.log('DEBUG: Analysis received search params:', {
+    hasPlantData: !!searchParams?.plantData,
+    hasPlantName: !!searchParams?.plantName,
+    hasImageUri: !!searchParams?.imageUri,
+    isTextSearchParam: searchParams?.isTextSearch,
+    savedGeminiInfo: !!searchParams?.savedGeminiInfo
+  });
+  
+  // First check for explicit text search flag in URL params
+  if (searchParams && searchParams.isTextSearch === 'true') {
+    console.log('DEBUG: Text search detected from URL param');
+    isTextSearch = true;
+    plantName = searchParams.plantName;
+    // For text search, we'll use the savedGeminiInfo directly
+    if (searchParams.savedGeminiInfo) {
+      try {
+        const geminiData = JSON.parse(searchParams.savedGeminiInfo);
+        // We'll set this later in handleSavedView
+      } catch (error) {
+        console.error('Error parsing savedGeminiInfo:', error);
+      }
+    }
+  }
+  
+  // Then process plantData
   if (searchParams && searchParams.plantData) {
     try {
       // Only parse if plantData is a string that looks like JSON
       if (typeof searchParams.plantData === 'string' && searchParams.plantData.trim().startsWith('{')) {
         const parsed = JSON.parse(searchParams.plantData);
+        console.log('DEBUG: Parsed plant data:', {
+          hasTextSearch: !!parsed.textSearch,
+          searchType: parsed.searchType,
+          hasGeminiData: !!parsed.geminiData
+        });
         
         // Check if this is a text-based search
-        if (parsed && parsed.textSearch) {
+        if (parsed && (parsed.textSearch || parsed.searchType === 'text')) {
+          console.log('DEBUG: Text search detected from plantData');
           isTextSearch = true;
-          plantName = searchParams.plantName;
-          plantData = { textSearch: true };
+          plantName = searchParams.plantName || parsed.searchTerm;
+          plantData = parsed;
+          imageUri = searchParams.imageUri || parsed.imageUri;
         } else if (parsed && parsed.plantData) {
           plantData = parsed.plantData;
           imageUri = parsed.imageUri;
@@ -37,11 +71,20 @@ export default function AnalysisScreen() {
         plantData = searchParams.plantData;
         imageUri = searchParams.imageUri;
       }
-    } catch {
+    } catch (error) {
+      console.error('Error parsing plantData:', error);
       plantData = searchParams.plantData;
       imageUri = searchParams.imageUri;
     }
   }
+  
+  // Final debug log of determined search type
+  console.log('DEBUG: Analysis determined:', {
+    isTextSearch,
+    plantName,
+    hasPlantData: !!plantData,
+    hasImageUri: !!imageUri
+  });
 
   if (!plantData) {
     return (
@@ -121,15 +164,39 @@ export default function AnalysisScreen() {
   // Helper function to handle text-based search
   const handleTextSearch = async () => {
     try {
+      console.log('DEBUG: Handling text search for:', plantName);
       setGeminiPlantName(plantName);
       
-      // Skip PlantNet and directly use Gemini API
-      const info = await getPlantDetails(plantName);
-      setGeminiInfo(info);
+      // If we already have Gemini info from the search params, use that
+      if (searchParams?.savedGeminiInfo) {
+        try {
+          console.log('DEBUG: Using saved Gemini info from params');
+          const info = JSON.parse(searchParams.savedGeminiInfo);
+          setGeminiInfo(info);
+        } catch (error) {
+          console.error('Error parsing saved Gemini info:', error);
+          // Fall back to fetching new info
+          console.log('DEBUG: Falling back to fetching new Gemini info');
+          const info = await getPlantDetails(plantName);
+          setGeminiInfo(info);
+        }
+      } else {
+        // Skip PlantNet and directly use Gemini API
+        console.log('DEBUG: Fetching new Gemini info');
+        const info = await getPlantDetails(plantName);
+        setGeminiInfo(info);
+      }
       
-      // Fetch a random plant image from Unsplash
-      const imageUrl = fetchPlantImage(plantName);
-      setPlantImageUrl(imageUrl);
+      // Use image URI from params or fetch a new one
+      if (imageUri) {
+        console.log('DEBUG: Using image URI from params:', imageUri);
+        setPlantImageUrl(imageUri);
+      } else {
+        // Fetch a random plant image from Unsplash
+        console.log('DEBUG: Fetching new plant image');
+        const imageUrl = await fetchPlantImage(plantName);
+        setPlantImageUrl(imageUrl);
+      }
       
       // Track analysis if user is logged in
       if (user?.id) {
@@ -155,10 +222,18 @@ export default function AnalysisScreen() {
 
   // Helper function to handle image-based search
   const handleImageSearch = async () => {
+    // Skip this entire function for text-based searches
+    if (isTextSearch) {
+      console.log('DEBUG: Skipping image search for text-based search');
+      return true;
+    }
+    
     const plantName = getPlantNetTopName();
+    console.log('DEBUG: Image search using PlantNet name:', plantName);
     setGeminiPlantName(plantName);
 
     if (!plantName) {
+      console.error('DEBUG: No valid plant name from PlantNet');
       setGeminiError('Could not determine a valid plant name from PlantNet. Please try another image.');
       return false;
     }
@@ -190,8 +265,11 @@ export default function AnalysisScreen() {
   // Handle plant analysis on mount/plant change
   useEffect(() => {
     const handlePlantAnalysis = async () => {
+      console.log('DEBUG: Starting plant analysis, isTextSearch:', isTextSearch);
+      
       // Handle saved view
       if (searchParams?.isSavedView) {
+        console.log('DEBUG: Handling saved view');
         handleSavedView();
         return;
       }
@@ -200,16 +278,23 @@ export default function AnalysisScreen() {
       setAnalysisPhase('initial');
       setGeminiInfo(null); // Clear previous plant info
       setGeminiError(null);
+      // Clear any previous plant image URL for text searches
+      if (isTextSearch) {
+        setPlantImageUrl('');  
+      }
       
       // Handle text-based search differently
       if (isTextSearch && plantName) {
+        console.log('DEBUG: Processing text-based search for:', plantName);
         // For text search, we go straight to Gemini
         setAnalysisPhase('gemini');
         setGeminiLoading(true);
         const success = await handleTextSearch();
+        console.log('DEBUG: Text search result:', success ? 'success' : 'failed');
         setGeminiLoading(!success);
         setAnalysisPhase(success ? 'complete' : 'none');
       } else {
+        console.log('DEBUG: Processing image-based search');
         // For image search, we show PlantNet results first, then Gemini
         setAnalysisPhase('plantnet');
         // PlantNet data is already available in plantData
@@ -218,100 +303,130 @@ export default function AnalysisScreen() {
         setAnalysisPhase('gemini');
         setGeminiLoading(true);
         const success = await handleImageSearch();
+        console.log('DEBUG: Image search result:', success ? 'success' : 'failed');
         setGeminiLoading(!success);
         setAnalysisPhase(success ? 'complete' : 'none');
       }
     };
 
     handlePlantAnalysis();
-  }, [searchParams?.plantData, searchParams?.imageUri, searchParams?.plantName, searchParams?.isSavedView]);
+  }, [searchParams?.plantData, searchParams?.imageUri, searchParams?.plantName, searchParams?.isTextSearch, searchParams?.isSavedView]);
 
   // Disease detection functionality has been disabled
   // useEffect for fetchPlantHealthData removed
 
   // Only show plant info if we have Gemini data
   // Extract plant info and ensure common name is set for text-based searches
-  let plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
+  const plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
   
   // For text-based searches, ensure the common name is set to the search term if not already set
+  let displayPlantInfo = plantInfo;
   if (plantInfo && isTextSearch && plantName && !plantInfo.commonName) {
-    plantInfo = {
+    displayPlantInfo = {
       ...plantInfo,
       commonName: plantName
     };
   }
-  const plantId = plantInfo ? ((plantData && plantData.id) || (imageUri ? imageUri : '') + (plantInfo.scientificName || '')) : '';
-  const { addPlant, removePlant, isPlantSaved } = useSavedPlants();
+  
+  // Generate a unique ID for the plant
+  const plantId = isTextSearch ? 
+    `text-${plantName}-${Date.now()}` : 
+    ((plantData && plantData.id) || (imageUri ? imageUri : '') + (plantInfo?.scientificName || ''));
+  
+  // Check if we have a saved state
+  const { isPlantSaved, addPlant, removePlant } = useSavedPlants();
   const [saved, setSaved] = useState(false);
-
+  
+  // Check if the plant is saved when data changes
   useEffect(() => {
-    if (plantInfo) {
-      setSaved(isPlantSaved({ id: plantId, imageUri, scientificName: plantInfo.scientificName }));
+    if (isTextSearch && geminiInfo) {
+      // For text search, we check by plant name
+      const isSaved = isPlantSaved({ 
+        plantData: { 
+          commonName: plantInfo?.commonName || plantName,
+          scientificName: plantInfo?.scientificName || ''
+        } 
+      });
+      setSaved(isSaved);
+    } else if (plantData?.suggestions && plantData.suggestions.length > 0) {
+      // For image search, we check by scientific name
+      const suggestion = plantData.suggestions[0];
+      const scientificName = suggestion.plant_details?.scientific_name || '';
+      const isSaved = isPlantSaved({ plantData: { scientificName } });
+      setSaved(isSaved);
     }
-  }, [isPlantSaved, plantId, imageUri, plantInfo && plantInfo.scientificName]);
+  }, [plantData, geminiInfo, isPlantSaved, plantInfo, plantName, isTextSearch]);
 
   const handleToggleSave = () => {
-    if (!plantInfo) return;
+    if (!plantInfo && !isTextSearch) return;
+    
     if (saved) {
       removePlant(plantId);
-      setSaved(false); // Update the saved state
+      setSaved(false);
       Toast.show({
         type: 'info',
         text1: 'Plant removed',
-        text2: plantInfo.commonName || 'Plant has been removed from your collection',
+        text2: (displayPlantInfo?.commonName || plantName || 'Plant') + ' has been removed from your collection',
         position: 'top',
         visibilityTime: 2000,
       });
     } else {
       // Handle saving differently based on search type
       if (isTextSearch) {
-        // For text-based searches, use the plant name directly
-        addPlant({
-          plantData: {
-            textSearch: true,
-            commonName: plantInfo.commonName || plantName,
-            scientificName: plantInfo.scientificName || '',
-            geminiInfo: geminiInfo // Save the Gemini info for later use
+        // For text-based searches, use the standardized plant data model
+        const { createStandardPlantData } = require('../../utils/plantDataModel');
+        
+        const standardPlantData = createStandardPlantData({
+          geminiData: {
+            ...geminiInfo,
+            plantInfo: plantInfo
           },
-          imageUri: plantImageUrl, // Use the fetched image URL for text-based searches
-          id: plantId,
-          savedAt: Date.now(),
-          searchType: 'text'
+          imageUri: plantImageUrl,
+          searchType: 'text',
+          searchTerm: plantName,
+          id: plantId
         });
+        
+        addPlant(standardPlantData);
       } else {
-        console.log('DEBUG: Saving plantData:', JSON.stringify(plantData, null, 2));
-        // Extract names from the suggestions array for image-based searches
-        let commonName = '';
-        let scientificName = '';
-        if (
-          plantData.suggestions &&
-          plantData.suggestions.length > 0 &&
-          plantData.suggestions[0].plant_details
-        ) {
-          const details = plantData.suggestions[0].plant_details;
-          commonName = Array.isArray(details.common_names) && details.common_names.length > 0
-            ? details.common_names[0]
-            : '';
-          scientificName = details.scientific_name || '';
+        // Import the standardized plant data model
+        const { createStandardPlantData } = require('../../utils/plantDataModel');
+        
+        if (isTextSearch) {
+          // For text-based searches, use the standardized plant data model
+          const standardPlantData = createStandardPlantData({
+            geminiData: {
+              ...geminiInfo,
+              plantInfo: displayPlantInfo
+            },
+            imageUri: plantImageUrl,
+            searchType: 'text',
+            searchTerm: plantName,
+            id: plantId
+          });
+          
+          addPlant(standardPlantData);
+        } else {
+          // For image-based searches, use the standardized plant data model
+          const standardPlantData = createStandardPlantData({
+            plantNetData: plantData,
+            geminiData: {
+              ...geminiInfo,
+              plantInfo: plantInfo
+            },
+            imageUri: imageUri || '',
+            searchType: 'image',
+            id: plantId
+          });
+          
+          addPlant(standardPlantData);
         }
-        addPlant({
-          plantData: {
-            ...plantData,
-            commonName,
-            scientificName,
-            geminiInfo: geminiInfo // Save the Gemini info for later use
-          },
-          imageUri: imageUri || '',
-          id: plantId,
-          savedAt: Date.now(),
-          searchType: 'image'
-        });
       }
       setSaved(true); // Update the saved state
       Toast.show({
         type: 'info',
         text1: 'Plant saved',
-        text2: plantInfo.commonName || 'Plant has been added to your collection',
+        text2: (displayPlantInfo?.commonName || plantName || 'Plant') + ' has been added to your collection',
         position: 'top',
         visibilityTime: 2000,
       });
@@ -368,7 +483,7 @@ export default function AnalysisScreen() {
     <AnalysisContent
       imageUri={isTextSearch ? plantImageUrl : imageUri}
       plantData={plantData}
-      plantInfo={plantInfo}
+      plantInfo={displayPlantInfo}
       analysisPhase={analysisPhase}
       handleToggleSave={handleToggleSave}
       saved={saved} // Pass the saved state to AnalysisContent

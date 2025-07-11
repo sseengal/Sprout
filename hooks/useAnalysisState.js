@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Alert } from 'react-native';
+import { useEffect, useState } from 'react';
+import Toast from 'react-native-toast-message';
 import { useAuth } from '../contexts/AuthContext';
 import { useSavedPlants } from '../contexts/SavedPlantsContext';
 import { getAvailableCredits } from '../lib/analysisCredits';
-import Toast from 'react-native-toast-message';
-import { 
-  fetchPlantImage, 
-  trackAnalysis, 
-  checkCredits, 
-  parseSavedGeminiInfo, 
-  getPlantDetails 
+import {
+    checkCredits,
+    fetchPlantImage,
+    getPlantDetails,
+    parseSavedGeminiInfo,
+    trackAnalysis
 } from '../utils/analysisUtils';
 import { extractPlantInfo } from '../utils/plantDetails';
+import { createStandardPlantData } from '../utils/plantDataModel';
 
 /**
  * Custom hook to manage Analysis screen state and logic
@@ -66,10 +66,19 @@ export const useAnalysisState = (searchParams) => {
   
   // Check if plant is saved on mount and when plantData changes
   useEffect(() => {
-    if (plantData?.id) {
-      setSaved(isPlantSaved(plantData.id));
+    // Check if the plant is already saved
+    if (plantData && plantData.id) {
+      const isSaved = isPlantSaved({ id: plantData.id });
+      setSaved(isSaved);
+    } else if (geminiInfo && imageUri) {
+      const plantInfo = extractPlantInfo(geminiInfo);
+      const isSaved = isPlantSaved({
+        imageUri,
+        scientificName: plantInfo.scientificName
+      });
+      setSaved(isSaved);
     }
-  }, [plantData, isPlantSaved]);
+  }, [plantData, geminiInfo, imageUri, isPlantSaved]);
   
   // Reset Gemini info when component unmounts or when not in saved view
   useEffect(() => {
@@ -200,52 +209,65 @@ export const useAnalysisState = (searchParams) => {
   };
   
   // Function to toggle save status
-  const handleToggleSave = () => {
-    // Extract plant info from Gemini data
-    let plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
-    
-    // For text-based searches, ensure the common name is set to the search term if not already set
-    if (plantInfo && isTextSearch && plantName && !plantInfo.commonName) {
-      plantInfo = {
-        ...plantInfo,
-        commonName: plantName
-      };
-    }
-    
-    const plantId = plantInfo ? ((plantData && plantData.id) || (imageUri ? imageUri : '') + (plantInfo.scientificName || '')) : '';
-    
-    if (!plantId) {
-      console.error('Cannot save plant: missing plant ID');
-      return;
-    }
-    
-    if (saved) {
-      removePlant(plantId);
-      setSaved(false);
+  const handleToggleSave = async () => {
+    try {
+      // Extract plant info from Gemini data for UI messages
+      let plantInfo = geminiInfo ? extractPlantInfo(geminiInfo) : null;
+      
+      // For text-based searches, ensure the common name is set to the search term if not already set
+      if (plantInfo && isTextSearch && plantName && !plantInfo.commonName) {
+        plantInfo = {
+          ...plantInfo,
+          commonName: plantName
+        };
+      }
+      
+      if (saved) {
+        // Get plant ID for removal
+        const plantId = plantData?.id || '';
+        if (!plantId) {
+          console.error('Cannot remove plant: missing plant ID');
+          return;
+        }
+        
+        await removePlant(plantId);
+        setSaved(false);
+        Toast.show({
+          type: 'info',
+          text1: 'Plant removed',
+          text2: plantInfo?.commonName || 'Plant has been removed from your collection',
+          position: 'top',
+          visibilityTime: 2000
+        });
+      } else {
+        // Create standardized plant data
+        const standardPlantData = createStandardPlantData({
+          plantNetData: plantData,
+          geminiData: geminiInfo,
+          imageUri: isTextSearch ? plantImageUrl : imageUri || '',
+          searchType: isTextSearch ? 'text' : 'image',
+          searchTerm: isTextSearch ? plantName : ''
+        });
+        
+        // Save the plant using the standardized format
+        await addPlant(standardPlantData);
+        setSaved(true);
+        Toast.show({
+          type: 'info',
+          text1: 'Plant saved',
+          text2: standardPlantData.commonName || 'Plant has been added to your collection',
+          position: 'top',
+          visibilityTime: 2000
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling plant save status:', error);
       Toast.show({
-        type: 'info',
-        text1: 'Plant removed',
-        text2: plantInfo.commonName || 'Plant has been removed from your collection',
+        type: 'error',
+        text1: saved ? 'Error removing plant' : 'Error saving plant',
+        text2: error.message || 'Please try again',
         position: 'top',
-        visibilityTime: 2000
-      });
-    } else {
-      addPlant({
-        plantData: {
-          id: plantId,
-          commonName: plantInfo.commonName || '',
-          scientificName: plantInfo.scientificName || '',
-          geminiInfo: geminiInfo
-        },
-        imageUri: isTextSearch ? plantImageUrl : imageUri || ''
-      });
-      setSaved(true);
-      Toast.show({
-        type: 'info',
-        text1: 'Plant saved',
-        text2: plantInfo.commonName || 'Plant has been added to your collection',
-        position: 'top',
-        visibilityTime: 2000
+        visibilityTime: 3000
       });
     }
   };
