@@ -17,16 +17,38 @@ import { plantProfileStyles as styles } from '../styles/plantProfileStyles';
 
 function PlantProfileScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const { id, initialTab, reminderId } = params;
+  
+  console.log('[DEBUG] PlantProfileScreen - Received params:', JSON.stringify(params));
+  console.log(`[DEBUG] PlantProfileScreen - Extracted params: id=${id}, initialTab=${initialTab}, reminderId=${reminderId}`);
+  
   const [plant, setPlant] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('info'); // Changed from 'overview' to 'info' for debugging
+  const [activeTab, setActiveTab] = useState(initialTab || 'info');
+  const [activeReminderId, setActiveReminderId] = useState(reminderId || null);
   const { removePlant } = useSavedPlants();
   const { getPlantReminders } = useReminders();
   const [plantReminders, setPlantReminders] = useState([]);
   const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
   const [petName, setPetName] = useState('');
   const [newImageUri, setNewImageUri] = useState(null);
+  
+  console.log(`[DEBUG] PlantProfileScreen - Initial state: activeTab=${activeTab}, activeReminderId=${activeReminderId}`);
+  
+  
+  // Handle initialTab and reminderId changes from navigation params
+  useEffect(() => {
+    if (initialTab) {
+      console.log(`[DEBUG] PlantProfileScreen - Setting active tab to: ${initialTab}`);
+      setActiveTab(initialTab);
+    }
+    
+    if (reminderId) {
+      console.log(`[DEBUG] PlantProfileScreen - Setting active reminder ID to: ${reminderId}`);
+      setActiveReminderId(reminderId);
+    }
+  }, [initialTab, reminderId]);
   
   useEffect(() => {
     const loadPlant = async () => {
@@ -64,6 +86,23 @@ function PlantProfileScreen() {
       console.log('PlantProfileScreen plantData:', plant);
     }
   }, [plant]);
+  
+  // Handle initialTab parameter from navigation
+  useEffect(() => {
+    console.log(`[DEBUG] PlantProfileScreen - initialTab useEffect triggered with value: ${initialTab}`);
+    if (initialTab) {
+      console.log(`[DEBUG] PlantProfileScreen - Setting activeTab to: ${initialTab}`);
+      setActiveTab(initialTab);
+    } else {
+      console.log('[DEBUG] PlantProfileScreen - No initialTab provided, keeping default');
+    }
+    
+    // Also handle reminderId if present
+    if (reminderId) {
+      console.log(`[DEBUG] PlantProfileScreen - Setting activeReminderId to: ${reminderId}`);
+      setActiveReminderId(reminderId);
+    }
+  }, [initialTab, reminderId]);
 
   const handleDelete = async () => {
     try {
@@ -99,7 +138,11 @@ function PlantProfileScreen() {
       case 'journal':
         return <JournalTab plantId={plant.id} />;
       case 'reminders':
-        return <RemindersTab plantReminders={plantReminders} plantId={plant.id} />;
+        return <RemindersTab 
+          plantReminders={plantReminders} 
+          plantId={plant.id} 
+          activeReminderId={activeReminderId} 
+        />;
       case 'info':
         return <InfoTab plant={plant} />;
       default:

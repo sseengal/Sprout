@@ -25,7 +25,7 @@ Notifications.setNotificationHandler({
  * @returns {Promise<string>} - A promise that resolves to the notification ID
  */
 export const scheduleReminderNotification = async (reminder) => {
-  const { id, care_type, plant_name, next_due, notes } = reminder;
+  const { id, care_type, plant_name, next_due, notes, plant_id } = reminder;
   
   try {
     // Format the notification content with more context
@@ -64,7 +64,9 @@ export const scheduleReminderNotification = async (reminder) => {
           reminderId: id,
           careType: care_type,
           plantName: plant_name,
-          notes: notes || ''
+          plantId: plant_id, // Include plant ID for routing
+          notes: notes || '',
+          actionable: true // Flag to indicate this notification can be acted upon
         },
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -80,7 +82,7 @@ export const scheduleReminderNotification = async (reminder) => {
     });
     
     console.log(`[NOTIFICATION] Scheduled for ${triggerDate.toLocaleString()}`);
-    console.log(`[NOTIFICATION] ${care_type} reminder for ${plant_name}`);
+    console.log(`[NOTIFICATION] ${care_type} reminder for ${plant_name} (Plant ID: ${plant_id})`);
     
     return notificationId;
   } catch (error) {

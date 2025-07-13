@@ -37,7 +37,7 @@ const ReminderModal = ({
     plant_name: plantName,
     plant_id: plantId, // Ensure plant_id is always included
     notes: '',
-    reminder_time: new Date().setHours(9, 0, 0, 0) // Default to 9:00 AM
+    reminder_time: new Date().toISOString() // Default to current time
   };
   
   // State for form fields
@@ -48,7 +48,7 @@ const ReminderModal = ({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(
-    new Date(formValues.reminder_time || new Date().setHours(9, 0, 0, 0))
+    new Date(formValues.reminder_time || new Date())
   );
   
   // Reset form when modal opens/closes or reminder changes
@@ -63,7 +63,7 @@ const ReminderModal = ({
       
       const reminderTime = initialValues.reminder_time 
         ? new Date(initialValues.reminder_time) 
-        : new Date().setHours(9, 0, 0, 0);
+        : new Date();
       setSelectedTime(new Date(reminderTime));
     }
   }, [visible, reminder, plantName]);

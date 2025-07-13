@@ -14,22 +14,40 @@ const getIconForType = (type) => {
 };
 
 export const JournalEntry = ({ entry }) => {
+  console.log('[DEBUG] JournalEntry - Rendering entry:', JSON.stringify(entry));
+  
   const { name: iconName, color: iconColor } = getIconForType(entry.type);
   const formattedDate = new Date(entry.date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
+  
+  // Check if this entry was created from a reminder
+  const isReminderEntry = entry.fromReminder === true;
+  console.log(`[DEBUG] JournalEntry - Is reminder entry: ${isReminderEntry}, reminderId: ${entry.reminderId || 'none'}`);
+  console.log(`[DEBUG] JournalEntry - Entry type: ${entry.type}, date: ${formattedDate}`);
+  
 
   return (
-    <View style={styles.entryContainer}>
+    <View style={[styles.entryContainer, isReminderEntry && styles.reminderEntryContainer]}>
       <View style={[styles.iconContainer, { backgroundColor: `${iconColor}20` }]}>
         <MaterialCommunityIcons name={iconName} size={20} color={iconColor} />
       </View>
       <View style={styles.entryContent}>
         <View style={styles.entryHeader}>
           {entry.title && <Text style={styles.entryTitle}>{entry.title}</Text>}
-          <Text style={[styles.entryDate, !entry.title && styles.entryDateNoTitle]}>{formattedDate}</Text>
+          <View style={styles.dateContainer}>
+            {isReminderEntry && (
+              <MaterialCommunityIcons 
+                name="bell-check-outline" 
+                size={14} 
+                color="#2E7D32" 
+                style={styles.reminderIcon} 
+              />
+            )}
+            <Text style={[styles.entryDate, !entry.title && styles.entryDateNoTitle]}>{formattedDate}</Text>
+          </View>
         </View>
         {entry.description ? <Text style={styles.entryDescription}>{entry.description}</Text> : null}
         {entry.images && entry.images.length > 0 && (
@@ -67,6 +85,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  reminderEntryContainer: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#2E7D32',
+  },
   iconContainer: {
     width: 40,
     height: 40,
@@ -82,6 +104,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reminderIcon: {
+    marginRight: 4,
   },
   entryTitle: {
     fontSize: 16,

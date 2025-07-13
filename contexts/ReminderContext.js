@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateReminderId, calculateNextDueDate } from '../utils/reminderUtils';
 import * as NotificationService from '../services/notificationService';
 import Toast from 'react-native-toast-message';
+import { useNavigation } from '@react-navigation/native';
 
 // Storage key for reminders
 const STORAGE_KEY = 'SPROUT_CARE_REMINDERS';
@@ -20,6 +21,7 @@ export function ReminderProvider({ children }) {
   const [savedPlants, setSavedPlants] = useState([]);
   const deletedReminderRef = useRef(null);
   const notificationSubscriptions = useRef(null);
+  const navigationRef = useRef(null);
 
   // Load reminders from AsyncStorage on mount
   useEffect(() => {
@@ -54,14 +56,96 @@ export function ReminderProvider({ children }) {
     notificationSubscriptions.current = NotificationService.setNotificationListeners(
       // When notification is received
       (notification) => {
-        console.log('Notification received:', notification);
+        console.log('[DEBUG] Notification received:', JSON.stringify(notification));
       },
       // When user interacts with notification
       (response) => {
-        const reminderId = response.notification.request.content.data?.reminderId;
-        if (reminderId) {
-          console.log(`User tapped on notification for reminder: ${reminderId}`);
-          // Here you could navigate to the reminder details or mark it as completed
+        console.log('[DEBUG] Notification response received:', JSON.stringify(response));
+        
+        try {
+          const data = response.notification.request.content.data;
+          console.log('[DEBUG] Notification data:', JSON.stringify(data));
+          
+          const reminderId = data?.reminderId;
+          const plantId = data?.plantId;
+          const careType = data?.careType;
+          
+          console.log(`[DEBUG] Extracted from notification - reminderId: ${reminderId}, plantId: ${plantId}, careType: ${careType}`);
+          
+          if (reminderId && plantId) {
+            console.log(`[DEBUG] User tapped on notification for reminder: ${reminderId}, plant: ${plantId}`);
+            
+            // Navigate to the plant profile with reminders tab selected
+            if (navigationRef.current) {
+              console.log('[DEBUG] Using navigationRef.current to navigate');
+              console.log('[DEBUG] Navigation params:', JSON.stringify({
+                id: plantId,
+                initialTab: 'reminders',
+                reminderId: reminderId
+              }));
+              
+              navigationRef.current.navigate('plant-profile', {
+                id: plantId,
+                initialTab: 'reminders',
+                reminderId: reminderId
+              });
+              console.log('[DEBUG] Navigation called');
+            } else {
+              console.log('[DEBUG] Navigation ref not available, trying alternative navigation');
+              // Store the navigation intent for when navigation becomes available
+              setTimeout(() => {
+                try {
+                  console.log('[DEBUG] Using Expo Router to navigate');
+                  
+                  // Import the router dynamically
+                  const { router } = require('expo-router');
+                  console.log('[DEBUG] Router imported successfully');
+                  
+                  // Construct the navigation params
+                  const params = {
+                    id: plantId,
+                    initialTab: 'reminders',
+                    reminderId: reminderId
+                  };
+                  
+                  console.log('[DEBUG] Navigation params:', JSON.stringify(params));
+                  
+                  // Use expo-router to navigate
+                  console.log('[DEBUG] Calling router.push with pathname: /plant-profile');
+                  router.push({
+                    pathname: 'plant-profile',  // Remove leading slash for better compatibility
+                    params: params
+                  });
+                  
+                  console.log('[DEBUG] Expo Router navigation called successfully');
+                } catch (error) {
+                  console.error('[ERROR] Failed to navigate after notification tap:', error);
+                  console.error('[ERROR] Error details:', error.message);
+                  console.error('[ERROR] Error stack:', error.stack);
+                  
+                  // Fallback navigation attempt
+                  try {
+                    console.log('[DEBUG] Attempting fallback navigation with router.navigate');
+                    const { router } = require('expo-router');
+                    router.navigate({
+                      pathname: 'plant-profile',
+                      params: {
+                        id: plantId,
+                        initialTab: 'reminders',
+                        reminderId: reminderId
+                      }
+                    });
+                  } catch (fallbackError) {
+                    console.error('[ERROR] Fallback navigation failed:', fallbackError.message);
+                  }
+                }
+              }, 500);  // Reduced timeout for faster response
+            }
+          } else {
+            console.log('[DEBUG] Missing required data in notification: reminderId or plantId');
+          }
+        } catch (error) {
+          console.error('[ERROR] Error processing notification response:', error);
         }
       }
     );
@@ -73,6 +157,54 @@ export function ReminderProvider({ children }) {
       }
     };
   }, []);
+  
+  // Set up listener for plant deletion events in a separate useEffect
+  useEffect(() => {
+    // Only set up if reminders are loaded
+    if (!isLoaded) return;
+    
+    const checkPlantDeletedEvent = async () => {
+      try {
+        const eventData = await AsyncStorage.getItem('PLANT_DELETED_EVENT');
+        if (eventData) {
+          const { plantId, timestamp } = JSON.parse(eventData);
+          const now = Date.now();
+          
+          // Only process events that are less than 5 seconds old to avoid processing old events
+          if (now - timestamp < 5000) {
+            console.log(`[DEBUG] Detected plant deletion event for plant ID: ${plantId}`);
+            
+            // Clean up reminders for the deleted plant
+            setReminders(prev => {
+              const updatedReminders = prev.filter(r => {
+                if (String(r.plant_id) !== String(plantId)) {
+                  return true;
+                }
+                
+                // For reminders being removed, cancel their notifications
+                console.log(`[DEBUG] Removing reminder ${r.id} for deleted plant ${plantId}`);
+                NotificationService.cancelNotification(r.id)
+                  .catch(error => console.error(`Error cancelling notification for reminder ${r.id}:`, error));
+                
+                return false;
+              });
+              
+              const removedCount = prev.length - updatedReminders.length;
+              console.log(`[DEBUG] Removed ${removedCount} reminders for deleted plant ${plantId}`);
+              return updatedReminders;
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking plant deleted event:', error);
+      }
+    };
+    
+    // Check for plant deletion events periodically
+    const eventCheckInterval = setInterval(checkPlantDeletedEvent, 1000);
+    
+    return () => clearInterval(eventCheckInterval);
+  }, [isLoaded]);
 
   // Save reminders to AsyncStorage whenever they change
   useEffect(() => {
@@ -212,21 +344,27 @@ export function ReminderProvider({ children }) {
       console.log(`[DEBUG] Found ${remindersToDelete.length} reminders for deleted plants`);
       console.log('[DEBUG] Reminders to delete:', JSON.stringify(remindersToDelete.map(r => ({ id: r.id, plant_id: r.plant_id }))));
       
-      // IMPORTANT: For now, log but don't actually delete
-      // This will help us debug the issue without losing data
-      console.log('[DEBUG] ⚠️ Automatic deletion is DISABLED for debugging');
+      console.log('[DEBUG] Cleaning up reminders for deleted plants');
       
-      /* Temporarily disabled for debugging
-      setTimeout(() => {
-        remindersToDelete.forEach(reminder => {
-          // Use internal removal to avoid toast notifications for cleanup
-          setReminders(prev => prev.filter(r => r.id !== reminder.id));
-          // Cancel any notifications
-          NotificationService.cancelNotification(reminder.id)
-            .catch(error => console.error(`Error cancelling notification for reminder ${reminder.id}:`, error));
+      // Use a single state update for better performance
+      setReminders(prev => {
+        const updatedReminders = prev.filter(r => {
+          // Keep reminders that don't have a plant_id or whose plant still exists
+          if (!r.plant_id || savedPlantIds.has(String(r.plant_id))) {
+            return true;
+          }
+          
+          // For reminders being removed, cancel their notifications
+          console.log(`[DEBUG] Removing reminder ${r.id} for deleted plant ${r.plant_id}`);
+          NotificationService.cancelNotification(r.id)
+            .catch(error => console.error(`Error cancelling notification for reminder ${r.id}:`, error));
+          
+          return false;
         });
-      }, 0);
-      */
+        
+        console.log(`[DEBUG] Removed ${prev.length - updatedReminders.length} reminders for deleted plants`);
+        return updatedReminders;
+      });
     } else {
       console.log('[DEBUG] No orphaned reminders found');
     }
@@ -463,21 +601,103 @@ export function ReminderProvider({ children }) {
 
   /**
    * Mark a reminder as completed and reschedule it
+   * @param {string} id - The ID of the reminder to complete
+   * @param {boolean} skipped - Whether the reminder was skipped (default: false)
+   * @returns {Promise<Object>} - The updated reminder
    */
-  const completeReminder = useCallback((id) => {
-    setReminders(prev => 
-      prev.map(reminder => {
+  const completeReminder = useCallback(async (id, skipped = false) => {
+    console.log(`[DEBUG] ReminderContext.completeReminder - Starting for reminder ID: ${id}, skipped: ${skipped}`);
+    
+    // First, ensure we have the latest reminders from storage
+    let currentReminders = reminders;
+    if (reminders.length === 0) {
+      console.log('[DEBUG] ReminderContext.completeReminder - No reminders in state, loading from storage');
+      try {
+        const storedReminders = await AsyncStorage.getItem(STORAGE_KEY);
+        if (storedReminders) {
+          currentReminders = JSON.parse(storedReminders);
+          console.log(`[DEBUG] ReminderContext.completeReminder - Loaded ${currentReminders.length} reminders from storage`);
+          // Update state for future operations
+          setReminders(currentReminders);
+        } else {
+          console.log('[DEBUG] ReminderContext.completeReminder - No reminders found in storage');
+        }
+      } catch (error) {
+        console.error('[ERROR] Failed to load reminders from storage:', error);
+      }
+    }
+    
+    // Normalize the ID for comparison (trim any whitespace)
+    const normalizedId = id.toString().trim();
+    console.log(`[DEBUG] ReminderContext.completeReminder - Looking for normalized ID: ${normalizedId}`);
+    
+    // Log all reminder IDs for debugging
+    console.log(`[DEBUG] ReminderContext.completeReminder - Available reminder IDs:`, 
+      JSON.stringify(currentReminders.map(r => r.id)));
+    
+    const reminderToUpdate = currentReminders.find(r => {
+      const currentId = r.id.toString().trim();
+      const matches = currentId === normalizedId;
+      console.log(`[DEBUG] Comparing ${currentId} with ${normalizedId}: ${matches}`);
+      return matches;
+    });
+    
+    if (!reminderToUpdate) {
+      console.error(`[ERROR] ReminderContext.completeReminder - Reminder with ID ${id} not found`);
+      // Try to find a reminder for the same plant if we have plant ID
+      const plantReminders = currentReminders.filter(r => r.plant_id === id);
+      if (plantReminders.length > 0) {
+        console.log(`[DEBUG] Found ${plantReminders.length} reminders for plant ID ${id} instead`);
+        const dueReminder = plantReminders.find(r => {
+          const nextDue = new Date(r.next_due);
+          return nextDue <= new Date();
+        });
+        
+        if (dueReminder) {
+          console.log(`[DEBUG] Using due reminder with ID ${dueReminder.id} instead`);
+          return completeReminder(dueReminder.id, skipped);
+        }
+      }
+      return null;
+    }
+    
+    console.log(`[DEBUG] ReminderContext.completeReminder - Found reminder:`, JSON.stringify(reminderToUpdate));
+    
+    let updatedReminder = null;
+    
+    setReminders(prev => {
+      console.log(`[DEBUG] ReminderContext.completeReminder - Current reminders count: ${prev.length}`);
+      
+      const newReminders = prev.map(reminder => {
         if (reminder.id === id) {
           const nextDue = calculateNextDueDate(reminder.frequency_days);
-          return { 
+          const now = new Date().toISOString();
+          
+          console.log(`[DEBUG] ReminderContext.completeReminder - Calculated next due date: ${nextDue.toISOString()}`);
+          
+          updatedReminder = { 
             ...reminder, 
             next_due: nextDue.toISOString(),
-            last_completed: new Date().toISOString()
+            last_completed: skipped ? reminder.last_completed : now,
+            last_skipped: skipped ? now : reminder.last_skipped,
+            status: skipped ? 'skipped' : 'completed'
           };
+          
+          console.log(`[DEBUG] ReminderContext.completeReminder - Updated reminder:`, JSON.stringify(updatedReminder));
+          return updatedReminder;
         }
         return reminder;
-      })
-    );
+      });
+      
+      console.log(`[DEBUG] ReminderContext.completeReminder - New reminders count: ${newReminders.length}`);
+      return newReminders;
+    });
+    
+    // Wait for state update to complete
+    console.log(`[DEBUG] ReminderContext.completeReminder - Waiting for state update to complete`);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    return updatedReminder;
   }, []);
 
   /**
@@ -502,6 +722,16 @@ export function ReminderProvider({ children }) {
     }
   }, []);
 
+  // Set navigation ref when available
+  useEffect(() => {
+    try {
+      const nav = require('@react-navigation/native').navigationRef;
+      navigationRef.current = nav;
+    } catch (error) {
+      console.error('Failed to get navigation ref:', error);
+    }
+  }, []);
+
   // Context value
   const value = {
     reminders,
@@ -515,7 +745,10 @@ export function ReminderProvider({ children }) {
     areAllRemindersEnabled,
     completeReminder,
     reloadReminders,
-    isLoaded
+    isLoaded,
+    setNavigationRef: (ref) => {
+      navigationRef.current = ref;
+    }
   };
 
   return (
