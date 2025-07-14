@@ -1,9 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState, useEffect } from 'react';
-import { Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { addJournalEntry, getJournalEntries } from '../../services/plantStorage';
+import AnalysisContent from '../analysis/AnalysisContent';
+import { extractPlantInfo } from '../../utils/plantDetails';
 import { JournalEntry } from './JournalEntry';
-import { getJournalEntries, addJournalEntry } from '../../services/plantStorage';
 
 export const JournalTab = ({ plantId }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -14,6 +16,17 @@ export const JournalTab = ({ plantId }) => {
     images: [],
     type: 'note'
   });
+
+  // Analysis viewer modal state
+  const [selectedAnalysisEntry, setSelectedAnalysisEntry] = useState(null);
+  const [isAnalysisModalVisible, setIsAnalysisModalVisible] = useState(false);
+
+  const handleEntryPress = (entry) => {
+    if (entry.type === 'analysis') {
+      setSelectedAnalysisEntry(entry);
+      setIsAnalysisModalVisible(true);
+    }
+  };
 
   // Load journal entries when component mounts or plantId changes
   useEffect(() => {
@@ -174,7 +187,9 @@ export const JournalTab = ({ plantId }) => {
           </View>
         ) : (
           entries.map((entry) => (
-            <JournalEntry key={entry.id} entry={entry} />
+            <TouchableOpacity key={entry.id} onPress={() => handleEntryPress(entry)}>
+              <JournalEntry entry={entry} />
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -185,6 +200,54 @@ export const JournalTab = ({ plantId }) => {
       >
         <MaterialIcons name="add" size={24} color="white" />
       </TouchableOpacity>
+
+      {/* Analysis Detail Modal */}
+      <Modal
+        visible={isAnalysisModalVisible}
+        animationType="slide"
+        onRequestClose={() => setIsAnalysisModalVisible(false)}
+      >
+        <View style={{ flex: 1 }}>
+          {selectedAnalysisEntry && (
+            <>
+              <AnalysisContent
+                imageUri={
+                  selectedAnalysisEntry.images?.[0]?.uri ||
+                  selectedAnalysisEntry.images?.[0] ||
+                  ''
+                }
+                plantInfo={
+                  selectedAnalysisEntry.data?.plantInfo ||
+                  extractPlantInfo(selectedAnalysisEntry.data?.geminiInfo || {})
+                }
+                plantData={selectedAnalysisEntry.data?.plantNetData || null}
+                saved={true}
+                handleToggleSave={() => {}}
+                geminiLoading={false}
+                geminiError={null}
+                isTextSearch={selectedAnalysisEntry.data?.searchType === 'text'}
+                onRetry={() => {}}
+                credits={{ total: 0 }}
+                isLoadingCredits={false}
+                analysisPhase="complete"
+              />
+              <TouchableOpacity
+                style={{
+                  position: 'absolute',
+                  top: 40,
+                  right: 20,
+                  backgroundColor: 'rgba(255,255,255,0.8)',
+                  padding: 6,
+                  borderRadius: 20,
+                }}
+                onPress={() => setIsAnalysisModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={28} color="#000" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Modal>
 
       {/* Add Entry Modal */}
       <Modal

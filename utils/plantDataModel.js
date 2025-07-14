@@ -60,6 +60,9 @@ export const createStandardPlantData = (options) => {
     
     // Journal entries
     journalEntries: [],
+
+    // Stored analyses (deprecated: use journalEntries with type 'analysis')
+    analyses: [],
     
     // Timestamps
     savedAt: Date.now(),
@@ -83,3 +86,24 @@ export const isValidPlantData = (plantData) => {
     typeof plantData.commonName === 'string'
   );
 };
+
+/**
+ * Creates a standardized journal entry.
+ * Use type 'analysis' to store an analysis result.
+ * @param {string} type - Entry type (e.g., 'analysis', 'note', 'watering').
+ * @param {Object} data - Arbitrary entry-specific data (analysis payload, etc.).
+ * @param {Array<string>} images - Array of image URIs.
+ * @param {Object} metadata - Optional metadata (title, description, etc.).
+ * @returns {Object} Journal entry object ready for storage.
+ */
+export const createJournalEntry = (type, data = {}, images = [], metadata = {}) => ({
+  id: String(Date.now() + Math.floor(Math.random() * 1000)),
+  type,
+  title: metadata.title || '',
+  description: metadata.description || '',
+  data,
+  images: Array.isArray(images) ? images : [images],
+  date: metadata.date || new Date().toISOString(),
+  createdAt: Date.now(),
+  ...metadata,
+});

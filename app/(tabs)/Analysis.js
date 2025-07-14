@@ -1,15 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { View, Text, Alert, Image } from 'react-native';
-import { analysisStyles as styles } from '../../styles/analysisStyles';
+import React, { useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import AnalysisContent from '../../components/analysis/AnalysisContent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlants } from '../../contexts/SavedPlantsContext';
-import { getAvailableCredits, useAnalysis } from '../../lib/analysisCredits';
+import { getAvailableCredits } from '../../lib/analysisCredits';
+import { analysisStyles as styles } from '../../styles/analysisStyles';
+import { checkCredits, fetchPlantImage, getPlantDetails, parseSavedGeminiInfo, trackAnalysis } from '../../utils/analysisUtils';
 import { extractPlantInfo } from '../../utils/plantDetails';
-import { fetchPlantImage, trackAnalysis, checkCredits, parseSavedGeminiInfo, getPlantDetails } from '../../utils/analysisUtils';
 
 export default function AnalysisScreen() {
   const searchParams = useLocalSearchParams();
@@ -338,7 +338,7 @@ export default function AnalysisScreen() {
   console.log('DEBUG: Generated plant ID:', plantId);
   
   // Check if we have a saved state
-  const { isPlantSaved, addPlant, removePlant } = useSavedPlants();
+  const { isPlantSaved, addPlant, removePlant, addJournalEntry } = useSavedPlants();
   const [saved, setSaved] = useState(false);
   
   // Check if the plant is saved when data changes
@@ -361,7 +361,7 @@ export default function AnalysisScreen() {
     }
   }, [plantData, geminiInfo, isPlantSaved, plantInfo, plantName, isTextSearch]);
 
-  const handleToggleSave = () => {
+  const handleToggleSave = async () => {
     if (!plantInfo && !isTextSearch) return;
     
     if (saved) {
@@ -392,7 +392,7 @@ export default function AnalysisScreen() {
           id: plantId
         });
         
-        addPlant(standardPlantData);
+        await addPlant(standardPlantData);
       } else {
         // For image-based searches, use the standardized plant data model
         const standardPlantData = createStandardPlantData({
@@ -406,8 +406,34 @@ export default function AnalysisScreen() {
           id: plantId
         });
         
-        addPlant(standardPlantData);
+        await addPlant(standardPlantData);
       }
+      // Add analysis journal entry for this plant
+      try {
+        const { createJournalEntry } = require('../../utils/plantDataModel');
+        const entryImages = [];
+        if (isTextSearch ? plantImageUrl : imageUri) {
+          entryImages.push(isTextSearch ? plantImageUrl : imageUri);
+        }
+        const entryData = {
+          geminiInfo,
+          plantInfo,
+          plantNetData: plantData,
+        };
+        const journalEntry = createJournalEntry(
+          'analysis',
+          entryData,
+          entryImages,
+          {
+            title: 'Plant analysis',
+            description: `Analysis results for ${(displayPlantInfo?.commonName || plantName || 'plant')}`,
+          },
+        );
+        await addJournalEntry(plantId, journalEntry);
+      } catch (error) {
+        console.error('Error adding analysis journal entry:', error);
+      }
+
       setSaved(true); // Update the saved state
       Toast.show({
         type: 'info',

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import * as PlantStorage from '../services/plantStorage';
 
@@ -65,6 +64,42 @@ export function SavedPlantsProvider({ children }) {
     }
   }, []);
 
+  // Journal entry helpers
+  const addJournalEntry = useCallback(async (plantId, entry) => {
+    try {
+      const updatedPlant = await PlantStorage.addJournalEntry(plantId, entry);
+      setSavedPlants(prev =>
+        prev.map(p => String(p.id) === String(plantId) ? updatedPlant : p)
+      );
+      return updatedPlant;
+    } catch (error) {
+      console.error('Error adding journal entry:', error);
+      throw error;
+    }
+  }, []);
+
+  const getJournalEntries = useCallback(async (plantId) => {
+    try {
+      return await PlantStorage.getJournalEntries(plantId);
+    } catch (error) {
+      console.error('Error getting journal entries:', error);
+      return [];
+    }
+  }, []);
+
+  const deleteJournalEntry = useCallback(async (plantId, entryId) => {
+    try {
+      const updatedPlant = await PlantStorage.deleteJournalEntry(plantId, entryId);
+      setSavedPlants(prev =>
+        prev.map(p => String(p.id) === String(plantId) ? updatedPlant : p)
+      );
+      return updatedPlant;
+    } catch (error) {
+      console.error('Error deleting journal entry:', error);
+      throw error;
+    }
+  }, []);
+
   // Utility to check if a plant is saved (by id or imageUri+scientificName)
   const isPlantSaved = useCallback((plant) => {
     return savedPlants.some(
@@ -81,7 +116,11 @@ export function SavedPlantsProvider({ children }) {
       removePlant, 
       updatePlant,
       isPlantSaved,
-      isLoaded
+      isLoaded,
+      // Journal helpers
+      addJournalEntry,
+      getJournalEntries,
+      deleteJournalEntry
     }}>
       {children}
     </SavedPlantsContext.Provider>
